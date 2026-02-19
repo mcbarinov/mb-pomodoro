@@ -15,19 +15,18 @@ logger = logging.getLogger(__name__)
 
 def cancel(ctx: typer.Context) -> None:
     """Cancel the active Pomodoro interval."""
-    app_ctx = use_context(ctx)
-    out, conn = app_ctx.out, app_ctx.conn
+    app = use_context(ctx)
 
-    row = db.fetch_latest_interval(conn)
+    row = db.fetch_latest_interval(app.conn)
     if row is None or row.status not in (IntervalStatus.RUNNING, IntervalStatus.PAUSED, IntervalStatus.INTERRUPTED):
-        out.print_interval_error_and_exit("NO_ACTIVE_INTERVAL", "No active interval to cancel.", row)
+        app.out.print_interval_error_and_exit("NO_ACTIVE_INTERVAL", "No active interval to cancel.", row)
 
     now = int(time.time())
     new_worked = row.effective_worked(now)
 
-    if not db.cancel_interval(conn, row.id, new_worked, now):
+    if not db.cancel_interval(app.conn, row.id, new_worked, now):
         logger.warning("Cancel rejected: concurrent modification id=%s", row.id)
-        out.print_error_and_exit("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
+        app.out.print_error_and_exit("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
 
     logger.info("Interval cancelled id=%s worked=%ds", row.id, new_worked)
-    out.print_cancelled(CancelResult(interval_id=row.id, worked_sec=new_worked))
+    app.out.print_cancelled(CancelResult(interval_id=row.id, worked_sec=new_worked))

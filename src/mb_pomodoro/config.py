@@ -16,7 +16,8 @@ class Config:
 
     data_dir: Path
     db_path: Path
-    pid_path: Path
+    timer_worker_pid_path: Path
+    tray_pid_path: Path
     log_path: Path
     config_path: Path
     default_duration: str
@@ -39,7 +40,8 @@ def build_config(data_dir: Path) -> Config:
     return Config(
         data_dir=data_dir,
         db_path=data_dir / "pomodoro.db",
-        pid_path=data_dir / "worker.pid",
+        timer_worker_pid_path=data_dir / "timer_worker.pid",
+        tray_pid_path=data_dir / "tray.pid",
         log_path=data_dir / "pomodoro.log",
         config_path=config_path,
         default_duration=default_duration,

@@ -15,6 +15,8 @@ from mb_pomodoro.commands.pause import pause
 from mb_pomodoro.commands.resume import resume
 from mb_pomodoro.commands.start import start
 from mb_pomodoro.commands.status import status
+from mb_pomodoro.commands.tray import tray
+from mb_pomodoro.commands.worker import worker
 from mb_pomodoro.config import DEFAULT_DATA_DIR, build_config
 from mb_pomodoro.db import get_connection
 from mb_pomodoro.log import setup_logging
@@ -55,7 +57,8 @@ def main(
     setup_logging(cfg.log_path)
     conn = get_connection(cfg.db_path)
     ctx.call_on_close(conn.close)
-    recover_stale_interval(conn, cfg.pid_path)
+    if ctx.invoked_subcommand not in {"worker", "tray"}:
+        recover_stale_interval(conn, cfg.timer_worker_pid_path)
     ctx.obj = AppContext(out=Output(json_mode=json_output), conn=conn, cfg=cfg)
 
 
@@ -66,3 +69,5 @@ app.command()(cancel)
 app.command()(finish)
 app.command()(history)
 app.command()(status)
+app.command()(tray)
+app.command()(worker)

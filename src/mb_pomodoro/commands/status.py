@@ -12,20 +12,19 @@ from mb_pomodoro.output import StatusActiveResult, StatusInactiveResult
 
 def status(ctx: typer.Context) -> None:
     """Show current Pomodoro timer status."""
-    app_ctx = use_context(ctx)
-    out, conn = app_ctx.out, app_ctx.conn
+    app = use_context(ctx)
 
-    row = db.fetch_latest_interval(conn)
+    row = db.fetch_latest_interval(app.conn)
 
     if row is None or row.status not in ACTIVE_STATUSES:
-        out.print_status(StatusInactiveResult())
+        app.out.print_status(StatusInactiveResult())
         return
 
     now = int(time.time())
     effective_worked = row.effective_worked(now)
     remaining = max(0, row.duration_sec - effective_worked)
 
-    out.print_status(
+    app.out.print_status(
         StatusActiveResult(
             interval_id=row.id,
             status=row.status,

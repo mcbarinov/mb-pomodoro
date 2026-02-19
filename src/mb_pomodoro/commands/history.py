@@ -15,10 +15,9 @@ def history(
     limit: Annotated[int, typer.Option("--limit", "-n", min=1, help="Maximum number of entries to show.")] = 10,
 ) -> None:
     """Show Pomodoro session history."""
-    app_ctx = use_context(ctx)
-    out, conn = app_ctx.out, app_ctx.conn
+    app = use_context(ctx)
 
-    rows = db.fetch_history(conn, limit)
+    rows = db.fetch_history(app.conn, limit)
 
     now = int(time.time())
     items: list[HistoryItem] = []
@@ -34,4 +33,4 @@ def history(
             )
         )
 
-    out.print_history(HistoryResult(intervals=items))
+    app.out.print_history(HistoryResult(intervals=items))

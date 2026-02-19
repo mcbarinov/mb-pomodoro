@@ -1,12 +1,12 @@
 [project]
 name = "mb-pomodoro"
-version = "0.0.1"
+version = "0.0.2"
 description = "macOS Pomodoro timer with a CLI-first workflow"
 readme = "README.md"
 license = "MIT"
 authors = [{ name = "mcbarinov" }]
 requires-python = ">=3.14"
-dependencies = ["typer~=0.24.0"]
+dependencies = ["typer~=0.24.0", "pyobjc-framework-Cocoa~=12.1"]
 [project.scripts]
 mb-pomodoro = "mb_pomodoro.cli:app"
 
@@ -28,6 +28,10 @@ dev = [
 python_version = "3.14"
 strict = true
 exclude = ["^tests/", "^tmp/"]
+
+[[tool.mypy.overrides]]
+module = ["AppKit", "Foundation", "PyObjCTools.*", "objc"]
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 130

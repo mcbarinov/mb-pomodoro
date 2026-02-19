@@ -88,7 +88,7 @@ The timer worker is a background process spawned by `start` and `resume`. It pol
    - Exit worker.
 
 Worker lifecycle:
-- Tracked via PID file at `~/.local/mb-pomodoro/worker.pid`.
+- Tracked via PID file at `~/.local/mb-pomodoro/timer_worker.pid`.
 - Spawned as a detached process (`start_new_session=True`).
 - Exits when: interval is no longer running, completion is detected, or an error occurs.
 - PID file is removed on exit.
@@ -328,7 +328,7 @@ Default: `~/.local/mb-pomodoro`. Contents:
 | File | Purpose |
 |---|---|
 | `pomodoro.db` | SQLite database (intervals + events). |
-| `worker.pid` | PID of the active timer worker. Exists only while a worker is running. |
+| `timer_worker.pid` | PID of the active timer worker. Exists only while a worker is running. |
 | `pomodoro.log` | Rotating log file (1 MB max, 3 backups). |
 | `config.toml` | Optional configuration. |
 

@@ -95,6 +95,20 @@ class HistoryResult:
     intervals: list[HistoryItem]
 
 
+@dataclass(frozen=True, slots=True)
+class TrayStartResult:
+    """Result of launching the tray in background."""
+
+    pid: int
+
+
+@dataclass(frozen=True, slots=True)
+class TrayStopResult:
+    """Result of stopping the tray."""
+
+    pid: int
+
+
 class Output:
     """Handles all CLI output in JSON or human-readable format."""
 
@@ -172,6 +186,14 @@ class Output:
                 f"{format_datetime(item.started_at):<16}  {format_mmss(item.duration_sec):>8}  "
                 f"{format_mmss(item.worked_sec):>8}  {item.status:<9}"
             )
+
+    def print_tray_started(self, result: TrayStartResult) -> None:
+        """Print tray launch confirmation."""
+        self._success(asdict(result), f"Tray started (pid {result.pid}).")
+
+    def print_tray_stopped(self, result: TrayStopResult) -> None:
+        """Print tray stop confirmation."""
+        self._success(asdict(result), f"Tray stopped (pid {result.pid}).")
 
     def print_status(self, result: StatusActiveResult | StatusInactiveResult) -> None:
         """Print current timer status."""
