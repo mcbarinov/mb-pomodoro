@@ -131,6 +131,10 @@ PRAGMA busy_timeout = 5000;   -- retry on SQLITE_BUSY instead of failing immedia
 PRAGMA foreign_keys = ON;     -- enforce foreign key constraints
 ```
 
+### Schema Migrations
+
+Schema changes are managed via SQLite's built-in `PRAGMA user_version`. Each migration is a Python function in `db.py`, indexed sequentially. On every connection, the app compares the DB's `user_version` to the target version and runs any pending migrations automatically. All migrations are idempotent — safe to re-run.
+
 ### Table: `intervals`
 
 One row per work interval. Source of truth for current state.

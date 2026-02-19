@@ -1,34 +1,63 @@
 """Database connection, schema management, and query/mutation functions."""
 
+import logging
 import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS intervals (
-    id TEXT PRIMARY KEY,
-    duration_sec INTEGER NOT NULL,
-    status TEXT NOT NULL CHECK(status IN ('running','paused','finished','completed','abandoned','cancelled','interrupted')),
-    started_at INTEGER NOT NULL,
-    ended_at INTEGER,
-    worked_sec INTEGER NOT NULL DEFAULT 0,
-    run_started_at INTEGER,
-    heartbeat_at INTEGER
-) STRICT;
+logger = logging.getLogger(__name__)
 
-CREATE TABLE IF NOT EXISTS interval_events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    interval_id TEXT NOT NULL REFERENCES intervals(id),
-    event_type TEXT NOT NULL
-        CHECK(event_type IN ('started','paused','resumed','finished','completed','abandoned','cancelled','interrupted')),
-    event_at INTEGER NOT NULL
-) STRICT;
+# --- Migrations ---
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_one_active ON intervals((1)) WHERE status IN ('running','paused','finished','interrupted');
-CREATE INDEX IF NOT EXISTS idx_events_interval_at ON interval_events(interval_id, event_at);
-CREATE INDEX IF NOT EXISTS idx_intervals_started_desc ON intervals(started_at DESC);
-"""
+
+def _migrate_v1(conn: sqlite3.Connection) -> None:
+    """Create initial schema: intervals + interval_events tables and indexes."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS intervals (
+            id TEXT PRIMARY KEY,
+            duration_sec INTEGER NOT NULL,
+            status TEXT NOT NULL
+                CHECK(status IN ('running','paused','finished','completed','abandoned','cancelled','interrupted')),
+            started_at INTEGER NOT NULL,
+            ended_at INTEGER,
+            worked_sec INTEGER NOT NULL DEFAULT 0,
+            run_started_at INTEGER,
+            heartbeat_at INTEGER
+        ) STRICT;
+
+        CREATE TABLE IF NOT EXISTS interval_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            interval_id TEXT NOT NULL REFERENCES intervals(id),
+            event_type TEXT NOT NULL
+                CHECK(event_type IN ('started','paused','resumed','finished','completed','abandoned','cancelled','interrupted')),
+            event_at INTEGER NOT NULL
+        ) STRICT;
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_one_active
+            ON intervals((1)) WHERE status IN ('running','paused','finished','interrupted');
+        CREATE INDEX IF NOT EXISTS idx_events_interval_at
+            ON interval_events(interval_id, event_at);
+        CREATE INDEX IF NOT EXISTS idx_intervals_started_desc
+            ON intervals(started_at DESC);
+    """)
+
+
+# Indexed by position: _MIGRATIONS[0] = v1, _MIGRATIONS[1] = v2, etc.
+# user_version=0 means no migrations applied.
+_MIGRATIONS: tuple[Callable[[sqlite3.Connection], None], ...] = (_migrate_v1,)
+
+
+def _run_migrations(conn: sqlite3.Connection) -> None:
+    """Run all pending schema migrations based on PRAGMA user_version."""
+    current_version: int = conn.execute("PRAGMA user_version").fetchone()[0]
+    for i, migrate_fn in enumerate(_MIGRATIONS):
+        target_version = i + 1
+        if current_version < target_version:
+            migrate_fn(conn)
+            conn.execute(f"PRAGMA user_version = {target_version}")
+            logger.info("Applied migration v%d (%s)", target_version, migrate_fn.__doc__)
 
 
 class IntervalStatus(StrEnum):
@@ -260,5 +289,5 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA busy_timeout = 5000")
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.executescript(_SCHEMA)
+    _run_migrations(conn)
     return conn
