@@ -4,7 +4,6 @@ import time
 
 import typer
 
-from mb_pomodoro import db
 from mb_pomodoro.app_context import use_context
 from mb_pomodoro.db import ACTIVE_STATUSES
 from mb_pomodoro.output import StatusActiveResult, StatusInactiveResult
@@ -15,8 +14,8 @@ def status(ctx: typer.Context) -> None:
     app = use_context(ctx)
 
     now = int(time.time())
-    row = db.fetch_latest_interval(app.conn)
-    today_completed = db.count_today_completed(app.conn, now)
+    row = app.db.fetch_latest_interval()
+    today_completed = app.db.count_today_completed(now)
 
     if row is None or row.status not in ACTIVE_STATUSES:
         app.out.print_status(StatusInactiveResult(today_completed=today_completed))

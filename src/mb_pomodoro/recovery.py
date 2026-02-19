@@ -1,12 +1,10 @@
 """Stale interval recovery after crashes or restarts."""
 
 import logging
-import sqlite3
 import time
 from pathlib import Path
 
-from mb_pomodoro import db
-from mb_pomodoro.db import IntervalStatus
+from mb_pomodoro.db import Db, IntervalStatus
 from mb_pomodoro.process import is_alive
 
 logger = logging.getLogger(__name__)
@@ -17,9 +15,9 @@ logger = logging.getLogger(__name__)
 _STARTUP_GRACE_SEC = 15
 
 
-def recover_stale_interval(conn: sqlite3.Connection, timer_worker_pid_path: Path) -> None:
+def recover_stale_interval(db: Db, timer_worker_pid_path: Path) -> None:
     """Detect a running interval with a dead worker and mark it as interrupted."""
-    row = db.fetch_latest_interval(conn)
+    row = db.fetch_latest_interval()
     if row is None or row.status != IntervalStatus.RUNNING:
         return
 
@@ -34,7 +32,7 @@ def recover_stale_interval(conn: sqlite3.Connection, timer_worker_pid_path: Path
         )
         return
 
-    db.recover_running_interval(conn, row.id, now)
+    db.recover_running_interval(row.id, now)
     logger.warning("Recovered stale interval id=%s: marked as interrupted", row.id)
 
     # Remove stale PID file

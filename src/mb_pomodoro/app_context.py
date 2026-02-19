@@ -1,11 +1,11 @@
 """Application context shared across CLI commands."""
 
-import sqlite3
 from dataclasses import dataclass
 
 import typer
 
 from mb_pomodoro.config import Config
+from mb_pomodoro.db import Db
 from mb_pomodoro.output import Output
 
 
@@ -14,7 +14,7 @@ class AppContext:
     """Shared application state passed through Typer context."""
 
     out: Output
-    conn: sqlite3.Connection
+    db: Db
     cfg: Config
 
 

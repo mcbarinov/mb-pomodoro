@@ -6,7 +6,6 @@
 import contextlib
 import os
 import signal
-import sqlite3
 import time
 from typing import Annotated, Any, Self
 
@@ -16,9 +15,8 @@ from AppKit import NSApplication, NSApplicationActivationPolicyAccessory, NSMenu
 from Foundation import NSDate, NSDefaultRunLoopMode, NSObject, NSRunLoop, NSTimer
 from PyObjCTools import AppHelper
 
-from mb_pomodoro import db
 from mb_pomodoro.app_context import use_context
-from mb_pomodoro.db import ACTIVE_STATUSES, IntervalRow, IntervalStatus
+from mb_pomodoro.db import ACTIVE_STATUSES, Db, IntervalRow, IntervalStatus
 from mb_pomodoro.output import TrayStartResult, TrayStopResult
 from mb_pomodoro.process import is_alive, read_pid, spawn_tray, write_pid_file
 from mb_pomodoro.time_utils import format_mmss
@@ -46,7 +44,7 @@ def _format_title(row: IntervalRow | None, today_completed: int) -> str:
 class _TrayDelegate(NSObject):  # type: ignore[misc]
     """NSObject delegate that handles timer callbacks and menu actions."""
 
-    conn: sqlite3.Connection
+    db: Db
     status_item: Any
     # Menu items
     status_menu_item: Any
@@ -55,9 +53,9 @@ class _TrayDelegate(NSObject):  # type: ignore[misc]
     left_item: Any
     today_completed_item: Any
 
-    def initWithConn_statusItem_statusMenuItem_durationItem_workedItem_leftItem_todayCompletedItem_(  # noqa: N802
+    def initWithDb_statusItem_statusMenuItem_durationItem_workedItem_leftItem_todayCompletedItem_(  # noqa: N802
         self,
-        conn: sqlite3.Connection,
+        db: Db,
         status_item: object,
         status_menu_item: object,
         duration_item: object,
@@ -65,9 +63,9 @@ class _TrayDelegate(NSObject):  # type: ignore[misc]
         left_item: object,
         today_completed_item: object,
     ) -> Self:
-        """Initialize delegate with DB connection, status item, and menu items."""
+        """Initialize delegate with DB handle, status item, and menu items."""
         self = objc.super(_TrayDelegate, self).init()  # noqa: PLW0642
-        self.conn = conn
+        self.db = db
         self.status_item = status_item
         self.status_menu_item = status_menu_item
         self.duration_item = duration_item
@@ -78,9 +76,9 @@ class _TrayDelegate(NSObject):  # type: ignore[misc]
 
     def refresh_(self, _timer: object) -> None:
         """Timer callback: poll DB and update menu bar title and detail items."""
-        row = db.fetch_latest_interval(self.conn)
+        row = self.db.fetch_latest_interval()
         now = int(time.time())
-        today_completed = db.count_today_completed(self.conn, now)
+        today_completed = self.db.count_today_completed(now)
 
         self.status_item.setTitle_(_format_title(row, today_completed))
 
@@ -113,7 +111,7 @@ class _TrayDelegate(NSObject):  # type: ignore[misc]
         NSApplication.sharedApplication().terminate_(None)
 
 
-def _run_tray(conn: sqlite3.Connection) -> None:
+def _run_tray(db: Db) -> None:
     """Set up NSStatusBar item and run the event loop."""
     nsapp = NSApplication.sharedApplication()
     nsapp.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
@@ -154,8 +152,8 @@ def _run_tray(conn: sqlite3.Connection) -> None:
     quit_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Quit", "quit:", "")
 
     # Delegate
-    delegate = _TrayDelegate.alloc().initWithConn_statusItem_statusMenuItem_durationItem_workedItem_leftItem_todayCompletedItem_(
-        conn, status_item, status_menu_item, duration_item, worked_item, left_item, today_completed_item
+    delegate = _TrayDelegate.alloc().initWithDb_statusItem_statusMenuItem_durationItem_workedItem_leftItem_todayCompletedItem_(
+        db, status_item, status_menu_item, duration_item, worked_item, left_item, today_completed_item
     )
 
     quit_item.setTarget_(delegate)
@@ -214,13 +212,13 @@ def _run_foreground(ctx: typer.Context) -> None:
         app.out.print_error_and_exit("TRAY_ALREADY_RUNNING", "Tray is already running.")
 
     # Separate DB connection — the tray outlives the CLI context lifecycle
-    conn = db.get_connection(cfg.db_path)
+    tray_db = Db(cfg.db_path)
     write_pid_file(tray_pid_path)
     try:
-        _run_tray(conn)
+        _run_tray(tray_db)
     finally:
         tray_pid_path.unlink(missing_ok=True)
-        conn.close()
+        tray_db.close()
 
 
 def _launch_background(ctx: typer.Context) -> None:

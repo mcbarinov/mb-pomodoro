@@ -97,13 +97,6 @@ class EventType(StrEnum):
     INTERRUPTED = "interrupted"
 
 
-def _insert_event(conn: sqlite3.Connection, interval_id: str, event_type: EventType, event_at: int) -> None:
-    """Insert a row into interval_events."""
-    conn.execute(
-        "INSERT INTO interval_events (interval_id, event_type, event_at) VALUES (?, ?, ?)", (interval_id, event_type, event_at)
-    )
-
-
 @dataclass(frozen=True, slots=True)
 class IntervalRow:
     """Interval row projection."""
@@ -123,7 +116,7 @@ class IntervalRow:
         return self.worked_sec
 
 
-# --- Queries ---
+# --- Helpers ---
 
 _SELECT_INTERVAL = "SELECT id, status, duration_sec, worked_sec, run_started_at, started_at, heartbeat_at FROM intervals"
 
@@ -141,176 +134,184 @@ def _to_interval_row(row: tuple[str, str, int, int, int | None, int, int | None]
     )
 
 
-def fetch_latest_interval(conn: sqlite3.Connection) -> IntervalRow | None:
-    """Return the most recently started interval, or None."""
-    row = conn.execute(_SELECT_INTERVAL + " ORDER BY started_at DESC LIMIT 1").fetchone()
-    return _to_interval_row(row) if row else None
+class Db:
+    """Database access object holding a SQLite connection."""
 
+    def __init__(self, db_path: Path) -> None:
+        """Open a SQLite connection with WAL mode, busy timeout, foreign keys, and run pending migrations.
 
-def fetch_interval(conn: sqlite3.Connection, interval_id: str) -> IntervalRow | None:
-    """Return an interval by id, or None."""
-    row = conn.execute(_SELECT_INTERVAL + " WHERE id = ?", (interval_id,)).fetchone()
-    return _to_interval_row(row) if row else None
+        Args:
+            db_path: Path to the SQLite database file.
 
+        """
+        self._conn = sqlite3.connect(str(db_path))
+        self._conn.execute("PRAGMA journal_mode = WAL")
+        self._conn.execute("PRAGMA busy_timeout = 5000")
+        self._conn.execute("PRAGMA foreign_keys = ON")
+        _run_migrations(self._conn)
 
-def fetch_history(conn: sqlite3.Connection, limit: int) -> list[IntervalRow]:
-    """Return the most recent intervals ordered by started_at DESC."""
-    rows = conn.execute(_SELECT_INTERVAL + " ORDER BY started_at DESC LIMIT ?", (limit,)).fetchall()
-    return [_to_interval_row(row) for row in rows]
+    def close(self) -> None:
+        """Close the underlying SQLite connection."""
+        self._conn.close()
 
+    # --- Private ---
 
-def fetch_daily_completed(conn: sqlite3.Connection, limit: int) -> list[tuple[str, int]]:
-    """Return daily completed counts (date, count) ordered by date DESC, days with >0 only."""
-    rows = conn.execute(
-        "SELECT date(started_at, 'unixepoch', 'localtime') AS day, COUNT(*) AS cnt"
-        " FROM intervals WHERE status = 'completed'"
-        " GROUP BY day ORDER BY day DESC LIMIT ?",
-        (limit,),
-    ).fetchall()
-    return [(row[0], row[1]) for row in rows]
-
-
-# --- Mutations ---
-
-
-def insert_interval(conn: sqlite3.Connection, interval_id: str, duration_sec: int, now: int) -> bool:
-    """Create a new running interval with 'started' event. Return False on IntegrityError."""
-    try:
-        conn.execute(
-            "INSERT INTO intervals (id, duration_sec, status, started_at, worked_sec, run_started_at)"
-            " VALUES (?, ?, 'running', ?, 0, ?)",
-            (interval_id, duration_sec, now, now),
+    def _insert_event(self, interval_id: str, event_type: EventType, event_at: int) -> None:
+        """Insert a row into interval_events."""
+        self._conn.execute(
+            "INSERT INTO interval_events (interval_id, event_type, event_at) VALUES (?, ?, ?)",
+            (interval_id, event_type, event_at),
         )
-        _insert_event(conn, interval_id, EventType.STARTED, now)
-        conn.commit()
-    except sqlite3.IntegrityError:
-        return False
-    return True
 
+    # --- Queries ---
 
-def finish_interval(conn: sqlite3.Connection, interval_id: str, duration_sec: int, now: int) -> bool:
-    """Mark running interval as finished (awaiting resolution). Return False if rowcount == 0."""
-    cursor = conn.execute(
-        "UPDATE intervals SET status = 'finished', worked_sec = ?, ended_at = ?,"
-        " run_started_at = NULL, heartbeat_at = NULL WHERE id = ? AND status = 'running'",
-        (duration_sec, now, interval_id),
-    )
-    if cursor.rowcount == 0:
-        conn.rollback()
-        return False
-    _insert_event(conn, interval_id, EventType.FINISHED, now)
-    conn.commit()
-    return True
+    def fetch_latest_interval(self) -> IntervalRow | None:
+        """Return the most recently started interval, or None."""
+        row = self._conn.execute(_SELECT_INTERVAL + " ORDER BY started_at DESC LIMIT 1").fetchone()
+        return _to_interval_row(row) if row else None
 
+    def fetch_interval(self, interval_id: str) -> IntervalRow | None:
+        """Return an interval by id, or None."""
+        row = self._conn.execute(_SELECT_INTERVAL + " WHERE id = ?", (interval_id,)).fetchone()
+        return _to_interval_row(row) if row else None
 
-def resolve_interval(conn: sqlite3.Connection, interval_id: str, resolution: IntervalStatus, now: int) -> bool:
-    """Resolve a finished interval as 'completed' or 'abandoned'. Return False if rowcount == 0.
+    def fetch_history(self, limit: int) -> list[IntervalRow]:
+        """Return the most recent intervals ordered by started_at DESC."""
+        rows = self._conn.execute(_SELECT_INTERVAL + " ORDER BY started_at DESC LIMIT ?", (limit,)).fetchall()
+        return [_to_interval_row(row) for row in rows]
 
-    Note: does not update ended_at — that records when the timer elapsed (set by finish_interval),
-    not when the user made a resolution decision.
-    """
-    cursor = conn.execute(
-        "UPDATE intervals SET status = ? WHERE id = ? AND status = 'finished'",
-        (resolution, interval_id),
-    )
-    if cursor.rowcount == 0:
-        conn.rollback()
-        return False
-    _insert_event(conn, interval_id, EventType(resolution), now)
-    conn.commit()
-    return True
+    def fetch_daily_completed(self, limit: int) -> list[tuple[str, int]]:
+        """Return daily completed counts (date, count) ordered by date DESC, days with >0 only."""
+        rows = self._conn.execute(
+            "SELECT date(started_at, 'unixepoch', 'localtime') AS day, COUNT(*) AS cnt"
+            " FROM intervals WHERE status = 'completed'"
+            " GROUP BY day ORDER BY day DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [(row[0], row[1]) for row in rows]
 
+    def count_today_completed(self, now: int) -> int:
+        """Count intervals completed today (local midnight to now)."""
+        today_start = start_of_day(now)
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM intervals WHERE started_at >= ? AND status = 'completed'",
+            (today_start,),
+        ).fetchone()
+        return int(row[0])
 
-def pause_interval(conn: sqlite3.Connection, interval_id: str, worked_sec: int, now: int) -> bool:
-    """Pause a running interval. Return False if no running interval was updated."""
-    cursor = conn.execute(
-        "UPDATE intervals SET status = 'paused', worked_sec = ?, run_started_at = NULL, heartbeat_at = NULL"
-        " WHERE id = ? AND status = 'running'",
-        (worked_sec, interval_id),
-    )
-    if cursor.rowcount == 0:
-        conn.rollback()
-        return False
-    _insert_event(conn, interval_id, EventType.PAUSED, now)
-    conn.commit()
-    return True
+    # --- Mutations ---
 
+    def insert_interval(self, interval_id: str, duration_sec: int, now: int) -> bool:
+        """Create a new running interval with 'started' event. Return False on IntegrityError."""
+        try:
+            self._conn.execute(
+                "INSERT INTO intervals (id, duration_sec, status, started_at, worked_sec, run_started_at)"
+                " VALUES (?, ?, 'running', ?, 0, ?)",
+                (interval_id, duration_sec, now, now),
+            )
+            self._insert_event(interval_id, EventType.STARTED, now)
+            self._conn.commit()
+        except sqlite3.IntegrityError:
+            return False
+        return True
 
-def resume_interval(conn: sqlite3.Connection, interval_id: str, now: int) -> bool:
-    """Resume a paused interval. Return False if no paused interval was updated."""
-    cursor = conn.execute(
-        "UPDATE intervals SET status = 'running', run_started_at = ? WHERE id = ? AND status IN ('paused', 'interrupted')",
-        (now, interval_id),
-    )
-    if cursor.rowcount == 0:
-        conn.rollback()
-        return False
-    _insert_event(conn, interval_id, EventType.RESUMED, now)
-    conn.commit()
-    return True
+    def finish_interval(self, interval_id: str, duration_sec: int, now: int) -> bool:
+        """Mark running interval as finished (awaiting resolution). Return False if rowcount == 0."""
+        cursor = self._conn.execute(
+            "UPDATE intervals SET status = 'finished', worked_sec = ?, ended_at = ?,"
+            " run_started_at = NULL, heartbeat_at = NULL WHERE id = ? AND status = 'running'",
+            (duration_sec, now, interval_id),
+        )
+        if cursor.rowcount == 0:
+            self._conn.rollback()
+            return False
+        self._insert_event(interval_id, EventType.FINISHED, now)
+        self._conn.commit()
+        return True
 
+    def resolve_interval(self, interval_id: str, resolution: IntervalStatus, now: int) -> bool:
+        """Resolve a finished interval as 'completed' or 'abandoned'. Return False if rowcount == 0.
 
-def cancel_interval(conn: sqlite3.Connection, interval_id: str, worked_sec: int, now: int) -> bool:
-    """Cancel a running or paused interval. Return False if no active interval was updated."""
-    cursor = conn.execute(
-        "UPDATE intervals SET status = 'cancelled', worked_sec = ?, ended_at = ?,"
-        " run_started_at = NULL, heartbeat_at = NULL WHERE id = ? AND status IN ('running', 'paused', 'interrupted')",
-        (worked_sec, now, interval_id),
-    )
-    if cursor.rowcount == 0:
-        conn.rollback()
-        return False
-    _insert_event(conn, interval_id, EventType.CANCELLED, now)
-    conn.commit()
-    return True
+        Note: does not update ended_at — that records when the timer elapsed (set by finish_interval),
+        not when the user made a resolution decision.
+        """
+        cursor = self._conn.execute(
+            "UPDATE intervals SET status = ? WHERE id = ? AND status = 'finished'",
+            (resolution, interval_id),
+        )
+        if cursor.rowcount == 0:
+            self._conn.rollback()
+            return False
+        self._insert_event(interval_id, EventType(resolution), now)
+        self._conn.commit()
+        return True
 
+    def pause_interval(self, interval_id: str, worked_sec: int, now: int) -> bool:
+        """Pause a running interval. Return False if no running interval was updated."""
+        cursor = self._conn.execute(
+            "UPDATE intervals SET status = 'paused', worked_sec = ?, run_started_at = NULL, heartbeat_at = NULL"
+            " WHERE id = ? AND status = 'running'",
+            (worked_sec, interval_id),
+        )
+        if cursor.rowcount == 0:
+            self._conn.rollback()
+            return False
+        self._insert_event(interval_id, EventType.PAUSED, now)
+        self._conn.commit()
+        return True
 
-def update_heartbeat(conn: sqlite3.Connection, interval_id: str, now: int) -> None:
-    """Update heartbeat timestamp for a running interval."""
-    conn.execute("UPDATE intervals SET heartbeat_at = ? WHERE id = ? AND status = 'running'", (now, interval_id))
-    conn.commit()
+    def resume_interval(self, interval_id: str, now: int) -> bool:
+        """Resume a paused interval. Return False if no paused interval was updated."""
+        cursor = self._conn.execute(
+            "UPDATE intervals SET status = 'running', run_started_at = ? WHERE id = ? AND status IN ('paused', 'interrupted')",
+            (now, interval_id),
+        )
+        if cursor.rowcount == 0:
+            self._conn.rollback()
+            return False
+        self._insert_event(interval_id, EventType.RESUMED, now)
+        self._conn.commit()
+        return True
 
+    def cancel_interval(self, interval_id: str, worked_sec: int, now: int) -> bool:
+        """Cancel a running or paused interval. Return False if no active interval was updated."""
+        cursor = self._conn.execute(
+            "UPDATE intervals SET status = 'cancelled', worked_sec = ?, ended_at = ?,"
+            " run_started_at = NULL, heartbeat_at = NULL WHERE id = ? AND status IN ('running', 'paused', 'interrupted')",
+            (worked_sec, now, interval_id),
+        )
+        if cursor.rowcount == 0:
+            self._conn.rollback()
+            return False
+        self._insert_event(interval_id, EventType.CANCELLED, now)
+        self._conn.commit()
+        return True
 
-def recover_running_interval(conn: sqlite3.Connection, interval_id: str, now: int) -> bool:
-    """Mark running interval as interrupted, credit worked time from heartbeat, and insert 'interrupted' event.
+    def update_heartbeat(self, interval_id: str, now: int) -> None:
+        """Update heartbeat timestamp for a running interval."""
+        self._conn.execute("UPDATE intervals SET heartbeat_at = ? WHERE id = ? AND status = 'running'", (now, interval_id))
+        self._conn.commit()
 
-    Uses heartbeat_at to recover work time accumulated before the crash.
-    Falls back to no credit if heartbeat_at is NULL (no heartbeat was written).
-    Return False if no running interval was updated.
-    """
-    cursor = conn.execute(
-        "UPDATE intervals SET status = 'interrupted',"
-        " worked_sec = CASE"
-        "   WHEN heartbeat_at IS NOT NULL AND run_started_at IS NOT NULL"
-        "   THEN MIN(worked_sec + (heartbeat_at - run_started_at), duration_sec)"
-        "   ELSE worked_sec END,"
-        " run_started_at = NULL, heartbeat_at = NULL"
-        " WHERE id = ? AND status = 'running'",
-        (interval_id,),
-    )
-    if cursor.rowcount == 0:
-        conn.rollback()
-        return False
-    _insert_event(conn, interval_id, EventType.INTERRUPTED, now)
-    conn.commit()
-    return True
+    def recover_running_interval(self, interval_id: str, now: int) -> bool:
+        """Mark running interval as interrupted, credit worked time from heartbeat, and insert 'interrupted' event.
 
-
-def count_today_completed(conn: sqlite3.Connection, now: int) -> int:
-    """Count intervals completed today (local midnight to now)."""
-    today_start = start_of_day(now)
-    row = conn.execute(
-        "SELECT COUNT(*) FROM intervals WHERE started_at >= ? AND status = 'completed'",
-        (today_start,),
-    ).fetchone()
-    return int(row[0])
-
-
-def get_connection(db_path: Path) -> sqlite3.Connection:
-    """Open a SQLite connection with WAL mode, busy timeout, and foreign keys enabled."""
-    conn = sqlite3.connect(str(db_path))
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA busy_timeout = 5000")
-    conn.execute("PRAGMA foreign_keys = ON")
-    _run_migrations(conn)
-    return conn
+        Uses heartbeat_at to recover work time accumulated before the crash.
+        Falls back to no credit if heartbeat_at is NULL (no heartbeat was written).
+        Return False if no running interval was updated.
+        """
+        cursor = self._conn.execute(
+            "UPDATE intervals SET status = 'interrupted',"
+            " worked_sec = CASE"
+            "   WHEN heartbeat_at IS NOT NULL AND run_started_at IS NOT NULL"
+            "   THEN MIN(worked_sec + (heartbeat_at - run_started_at), duration_sec)"
+            "   ELSE worked_sec END,"
+            " run_started_at = NULL, heartbeat_at = NULL"
+            " WHERE id = ? AND status = 'running'",
+            (interval_id,),
+        )
+        if cursor.rowcount == 0:
+            self._conn.rollback()
+            return False
+        self._insert_event(interval_id, EventType.INTERRUPTED, now)
+        self._conn.commit()
+        return True

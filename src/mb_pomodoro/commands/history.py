@@ -5,7 +5,6 @@ from typing import Annotated
 
 import typer
 
-from mb_pomodoro import db
 from mb_pomodoro.app_context import use_context
 from mb_pomodoro.output import DailyHistoryItem, DailyHistoryResult, HistoryItem, HistoryResult
 
@@ -19,12 +18,12 @@ def history(
     app = use_context(ctx)
 
     if daily:
-        rows = db.fetch_daily_completed(app.conn, limit)
+        rows = app.db.fetch_daily_completed(limit)
         items = [DailyHistoryItem(date=date, completed=count) for date, count in rows]
         app.out.print_daily_history(DailyHistoryResult(days=items))
         return
 
-    interval_rows = db.fetch_history(app.conn, limit)
+    interval_rows = app.db.fetch_history(limit)
 
     now = int(time.time())
     history_items: list[HistoryItem] = []

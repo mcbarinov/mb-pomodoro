@@ -9,7 +9,6 @@ from typing import Annotated
 
 import typer
 
-from mb_pomodoro import db
 from mb_pomodoro.app_context import use_context
 from mb_pomodoro.db import IntervalStatus
 from mb_pomodoro.output import FinishResult
@@ -28,12 +27,12 @@ def finish(ctx: typer.Context, resolution: Annotated[str, typer.Argument(help=_R
 
     resolved_status = IntervalStatus(resolution)
 
-    row = db.fetch_latest_interval(app.conn)
+    row = app.db.fetch_latest_interval()
     if row is None or row.status != IntervalStatus.FINISHED:
         app.out.print_interval_error_and_exit("NOT_FINISHED", "No finished interval to resolve.", row)
 
     now = int(time.time())
-    if not db.resolve_interval(app.conn, row.id, resolved_status, now):
+    if not app.db.resolve_interval(row.id, resolved_status, now):
         logger.warning("Finish rejected: concurrent modification id=%s", row.id)
         app.out.print_error_and_exit("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
 

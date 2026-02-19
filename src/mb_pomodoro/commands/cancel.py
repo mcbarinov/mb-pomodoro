@@ -5,7 +5,6 @@ import time
 
 import typer
 
-from mb_pomodoro import db
 from mb_pomodoro.app_context import use_context
 from mb_pomodoro.db import IntervalStatus
 from mb_pomodoro.output import CancelResult
@@ -17,14 +16,14 @@ def cancel(ctx: typer.Context) -> None:
     """Cancel the active Pomodoro interval."""
     app = use_context(ctx)
 
-    row = db.fetch_latest_interval(app.conn)
+    row = app.db.fetch_latest_interval()
     if row is None or row.status not in (IntervalStatus.RUNNING, IntervalStatus.PAUSED, IntervalStatus.INTERRUPTED):
         app.out.print_interval_error_and_exit("NO_ACTIVE_INTERVAL", "No active interval to cancel.", row)
 
     now = int(time.time())
     new_worked = row.effective_worked(now)
 
-    if not db.cancel_interval(app.conn, row.id, new_worked, now):
+    if not app.db.cancel_interval(row.id, new_worked, now):
         logger.warning("Cancel rejected: concurrent modification id=%s", row.id)
         app.out.print_error_and_exit("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
 

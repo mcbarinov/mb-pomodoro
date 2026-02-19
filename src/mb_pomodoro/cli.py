@@ -18,7 +18,7 @@ from mb_pomodoro.commands.status import status
 from mb_pomodoro.commands.tray import tray
 from mb_pomodoro.commands.worker import worker
 from mb_pomodoro.config import Config
-from mb_pomodoro.db import get_connection
+from mb_pomodoro.db import Db
 from mb_pomodoro.log import setup_logging
 from mb_pomodoro.output import Output
 from mb_pomodoro.recovery import recover_stale_interval
@@ -57,11 +57,11 @@ def main(
     cfg = Config.build(resolved_dir)
     cfg.data_dir.mkdir(parents=True, exist_ok=True)
     setup_logging(cfg.log_path)
-    conn = get_connection(cfg.db_path)
-    ctx.call_on_close(conn.close)
+    db = Db(cfg.db_path)
+    ctx.call_on_close(db.close)
     if ctx.invoked_subcommand not in {"worker", "tray"}:
-        recover_stale_interval(conn, cfg.timer_worker_pid_path)
-    ctx.obj = AppContext(out=Output(json_mode=json_output), conn=conn, cfg=cfg)
+        recover_stale_interval(db, cfg.timer_worker_pid_path)
+    ctx.obj = AppContext(out=Output(json_mode=json_output), db=db, cfg=cfg)
 
 
 app.command()(start)

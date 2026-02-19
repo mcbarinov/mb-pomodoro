@@ -7,7 +7,6 @@ from typing import Annotated
 
 import typer
 
-from mb_pomodoro import db
 from mb_pomodoro.app_context import use_context
 from mb_pomodoro.db import ACTIVE_STATUSES
 from mb_pomodoro.output import StartResult
@@ -32,7 +31,7 @@ def start(
         app.out.print_error_and_exit("INVALID_DURATION", f"Invalid duration: {duration}. Examples: 25, 25m, 90s, 10m30s.")
 
     # Check for an existing active interval
-    latest = db.fetch_latest_interval(app.conn)
+    latest = app.db.fetch_latest_interval()
     if latest and latest.status in ACTIVE_STATUSES:
         app.out.print_interval_error_and_exit("ACTIVE_INTERVAL_EXISTS", "An active interval already exists.", latest)
 
@@ -40,7 +39,7 @@ def start(
     interval_id = str(uuid.uuid4())
     now = int(time.time())
 
-    if not db.insert_interval(app.conn, interval_id, duration_sec, now):
+    if not app.db.insert_interval(interval_id, duration_sec, now):
         logger.warning("Start rejected: concurrent interval creation race")
         app.out.print_error_and_exit("ACTIVE_INTERVAL_EXISTS", "Another interval was started concurrently.")
 

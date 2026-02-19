@@ -7,7 +7,6 @@ from typing import Annotated
 
 import typer
 
-from mb_pomodoro import db
 from mb_pomodoro.app_context import use_context
 from mb_pomodoro.db import IntervalStatus
 from mb_pomodoro.notification import send_notification
@@ -24,7 +23,6 @@ def worker(
 ) -> None:
     """Run background timer worker. Not intended for manual use."""
     app = use_context(ctx)
-    conn = app.conn
     cfg = app.cfg
 
     logger.info("Worker started for interval id=%s pid=%d", interval_id, os.getpid())
@@ -33,7 +31,7 @@ def worker(
         try:
             last_heartbeat = 0  # Forces immediate heartbeat on first iteration
             while True:
-                row = db.fetch_interval(conn, interval_id)
+                row = app.db.fetch_interval(interval_id)
                 if row is None or row.status != IntervalStatus.RUNNING:
                     logger.info("Worker exiting: interval id=%s no longer running", interval_id)
                     break
@@ -42,16 +40,16 @@ def worker(
 
                 # Periodic heartbeat for crash recovery
                 if now - last_heartbeat >= _HEARTBEAT_INTERVAL_SEC:
-                    db.update_heartbeat(conn, interval_id, now)
+                    app.db.update_heartbeat(interval_id, now)
                     last_heartbeat = now
 
                 effective_worked = row.effective_worked(now)
                 if effective_worked >= row.duration_sec:
-                    if db.finish_interval(conn, interval_id, row.duration_sec, now):
+                    if app.db.finish_interval(interval_id, row.duration_sec, now):
                         logger.info("Interval finished id=%s duration=%ds", interval_id, row.duration_sec)
                         resolution = send_notification()
                         if resolution:
-                            db.resolve_interval(conn, interval_id, resolution, int(time.time()))
+                            app.db.resolve_interval(interval_id, resolution, int(time.time()))
                             logger.info("Interval resolved id=%s resolution=%s", interval_id, resolution)
                     else:
                         logger.warning("Finish race lost for interval id=%s", interval_id)
