@@ -14,6 +14,7 @@ These files are REQUIRED. Read them fully and follow all rules.
 ## Project Reading (context)
 These files are REQUIRED for project understanding.
 - `README.md`
+- `ADR.md`
 
 ## Preflight (mandatory)
 Before your first response:
@@ -22,3 +23,8 @@ Before your first response:
 3. In your first reply, list every file you have read from this document.
 
 Failure to follow this protocol is considered an error.
+
+## Testing the app
+
+The user may have a real pomodoro timer running. NEVER run `mb-pomodoro` commands against the default data directory.
+Always use `--data-dir /tmp/mb-pomodoro-test` (or similar) for any manual verification.

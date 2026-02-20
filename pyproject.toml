@@ -1,6 +1,6 @@
 [project]
 name = "mb-pomodoro"
-version = "0.0.3"
+version = "0.0.4"
 description = "macOS Pomodoro timer with a CLI-first workflow"
 readme = "README.md"
 license = "MIT"
@@ -18,7 +18,7 @@ build-backend = "hatchling.build"
 dev = [
     "pytest~=9.0.2",
     "pytest-xdist~=3.8.0",
-    "ruff~=0.15.1",
+    "ruff~=0.15.2",
     "pip-audit~=2.10.0",
     "bandit~=1.9.3",
     "mypy~=1.19.1",
