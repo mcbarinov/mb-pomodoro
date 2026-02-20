@@ -237,11 +237,11 @@ wheels = [
 
 [[package]]
 name = "mb-pomodoro"
-version = "0.0.4"
+version = "0.0.5"
 source = { editable = "." }
 dependencies = [
+    { name = "mm-pymac" },
     { name = "pydantic" },
-    { name = "pyobjc-framework-cocoa" },
     { name = "typer" },
 ]
 
@@ -257,8 +257,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "mm-pymac", specifier = "~=0.0.1" },
     { name = "pydantic", specifier = "~=2.12.5" },
-    { name = "pyobjc-framework-cocoa", specifier = "~=12.1" },
     { name = "typer", specifier = "~=0.24.0" },
 ]
 
@@ -279,6 +279,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba", size = 8729, upload-time = "2022-08-14T12:40:10.846Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
+]
+
+[[package]]
+name = "mm-pymac"
+version = "0.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyobjc-framework-cocoa" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2c/97/68a2e4c38ef5541548a7c9d358da36579fac58b2559d3692c3c7663733f7/mm_pymac-0.0.1.tar.gz", hash = "sha256:4aac2fe2cae1fe7cc124a75c1b1c47e846a5704d0fbe08314047e0bed2bea081", size = 32805, upload-time = "2026-02-20T11:46:18.814Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/63/df/57765bb894b6eac9f68388a1b3b3999208bebbcf38979cd6a3a5b710ebea/mm_pymac-0.0.1-py3-none-any.whl", hash = "sha256:ee9e8cafa9a67ad0df791ab01f2a309a76d6a6d6349d7ae19e29fa026ed077d1", size = 6953, upload-time = "2026-02-20T11:46:17.304Z" },
 ]
 
 [[package]]

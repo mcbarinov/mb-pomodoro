@@ -1,12 +1,12 @@
 [project]
 name = "mb-pomodoro"
-version = "0.0.4"
+version = "0.0.5"
 description = "macOS Pomodoro timer with a CLI-first workflow"
 readme = "README.md"
 license = "MIT"
 authors = [{ name = "mcbarinov" }]
 requires-python = ">=3.14"
-dependencies = ["typer~=0.24.0", "pyobjc-framework-Cocoa~=12.1", "pydantic~=2.12.5"]
+dependencies = ["typer~=0.24.0", "pydantic~=2.12.5", "mm-pymac~=0.0.1"]
 [project.scripts]
 mb-pomodoro = "mb_pomodoro.cli:app"
 
@@ -29,11 +29,10 @@ python_version = "3.14"
 strict = true
 exclude = ["^tests/", "^tmp/"]
 plugins = ["pydantic.mypy"]
-disable_error_code = ["prop-decorator"]  # pydantic @computed_field + @property pattern
+disable_error_code = [
+    "prop-decorator",
+] # pydantic @computed_field + @property pattern
 
-[[tool.mypy.overrides]]
-module = ["AppKit", "Foundation", "PyObjCTools.*", "objc"]
-ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 130

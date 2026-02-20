@@ -1,21 +1,15 @@
 """Menu bar status icon for the Pomodoro timer."""
 
-# pyright: reportAttributeAccessIssue=false
-# PyObjC generates AppKit/Foundation bindings at runtime, invisible to static analysis
-
 import contextlib
 import os
 import signal
-import subprocess
+import subprocess  # nosec B404
 import threading
 import time
-from typing import Annotated, Any, Self
+from typing import Annotated
 
-import objc
 import typer
-from AppKit import NSApplication, NSApplicationActivationPolicyAccessory, NSMenu, NSMenuItem, NSStatusBar
-from Foundation import NSDate, NSDefaultRunLoopMode, NSObject, NSRunLoop, NSTimer
-from PyObjCTools import AppHelper
+from mm_pymac import MenuItem, MenuSeparator, TrayApp
 
 from mb_pomodoro.app_context import use_context
 from mb_pomodoro.config import Config
@@ -28,13 +22,13 @@ _POLL_INTERVAL_SEC = 2.0
 _STOP_TIMEOUT_SEC = 2.0
 _LAUNCH_VERIFY_SEC = 0.5
 
-# Action items visibility per status: (start_hidden, pause_hidden, resume_hidden)
-_ACTION_VISIBILITY: dict[IntervalStatus | None, tuple[bool, bool, bool]] = {
-    None: (False, True, True),
-    IntervalStatus.RUNNING: (True, False, True),
-    IntervalStatus.PAUSED: (True, True, False),
-    IntervalStatus.INTERRUPTED: (True, True, False),
-    IntervalStatus.FINISHED: (True, True, True),
+# Visible action items per interval status (None = no active interval)
+_VISIBLE_ACTIONS: dict[IntervalStatus | None, frozenset[str]] = {
+    None: frozenset({"start"}),
+    IntervalStatus.RUNNING: frozenset({"pause"}),
+    IntervalStatus.PAUSED: frozenset({"resume"}),
+    IntervalStatus.INTERRUPTED: frozenset({"resume"}),
+    IntervalStatus.FINISHED: frozenset(),
 }
 
 
@@ -53,180 +47,106 @@ def _format_title(row: IntervalRow | None, today_completed: int) -> str:
     return icon
 
 
-class _TrayDelegate(NSObject):  # type: ignore[misc]
-    """NSObject delegate that handles timer callbacks and menu actions."""
+class _TrayController:
+    """Manages tray app lifecycle: menu items, polling, and CLI actions."""
 
-    db: Db
-    cfg: Config
-    status_item: Any
-    # Menu items — info
-    status_menu_item: Any
-    duration_item: Any
-    worked_item: Any
-    left_item: Any
-    today_completed_item: Any
-    # Menu items — actions
-    start_item: Any
-    pause_item: Any
-    resume_item: Any
+    def __init__(self, db: Db, cfg: Config) -> None:
+        self._db = db
+        self._cfg = cfg
+        self._app = TrayApp(title="\u25c7")
 
-    def initWithDb_cfg_statusItem_(self, db: Db, cfg: Config, status_item: object) -> Self:  # noqa: N802
-        """Initialize delegate with DB handle, config, and status bar item."""
-        self = objc.super(_TrayDelegate, self).init()  # noqa: PLW0642
-        self.db = db
-        self.cfg = cfg
-        self.status_item = status_item
-        return self
-
-    def buildMenu(self) -> None:  # noqa: N802
-        """Create the menu, all menu items, and attach to the status bar item."""
-        menu = NSMenu.alloc().init()
-
-        # Action items (only one visible at a time)
-        self.start_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Start", "startPomodoro:", "")
-        self.start_item.setTarget_(self)
-        menu.addItem_(self.start_item)
-
-        self.pause_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Pause", "pausePomodoro:", "")
-        self.pause_item.setTarget_(self)
-        self.pause_item.setHidden_(True)
-        menu.addItem_(self.pause_item)
-
-        self.resume_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Resume", "resumePomodoro:", "")
-        self.resume_item.setTarget_(self)
-        self.resume_item.setHidden_(True)
-        menu.addItem_(self.resume_item)
-
-        menu.addItem_(NSMenuItem.separatorItem())
+        # Action items (keyed by command name for visibility lookup)
+        self._actions: dict[str, MenuItem] = {
+            "start": MenuItem("Start", callback=lambda _: self._run_action("start")),
+            "pause": MenuItem("Pause", callback=lambda _: self._run_action("pause"), hidden=True),
+            "resume": MenuItem("Resume", callback=lambda _: self._run_action("resume"), hidden=True),
+        }
 
         # Info items
-        self.status_menu_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("No active interval", None, "")
-        self.status_menu_item.setEnabled_(False)
-        menu.addItem_(self.status_menu_item)
+        self._status_item = MenuItem("No active interval", enabled=False)
+        self._duration_item = MenuItem("Duration: --:--", enabled=False, hidden=True)
+        self._worked_item = MenuItem("Worked: --:--", enabled=False, hidden=True)
+        self._left_item = MenuItem("Left: --:--", enabled=False, hidden=True)
+        self._today_item = MenuItem("Today: 0 completed", enabled=False, hidden=True)
 
-        self.duration_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Duration: --:--", None, "")
-        self.duration_item.setEnabled_(False)
-        self.duration_item.setHidden_(True)
-        menu.addItem_(self.duration_item)
+        self._app.set_menu(
+            [
+                self._actions["start"],
+                self._actions["pause"],
+                self._actions["resume"],
+                MenuSeparator(),
+                self._status_item,
+                self._duration_item,
+                self._worked_item,
+                self._left_item,
+                self._today_item,
+                MenuSeparator(),
+                MenuItem("Quit", callback=lambda _: self._app.quit()),
+            ]
+        )
 
-        self.worked_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Worked: --:--", None, "")
-        self.worked_item.setEnabled_(False)
-        self.worked_item.setHidden_(True)
-        menu.addItem_(self.worked_item)
+    def run(self) -> None:
+        """Start the poll timer and enter the event loop."""
+        self._app.start_timer(_POLL_INTERVAL_SEC, self._refresh)
+        self._app.run()
 
-        self.left_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Left: --:--", None, "")
-        self.left_item.setEnabled_(False)
-        self.left_item.setHidden_(True)
-        menu.addItem_(self.left_item)
-
-        self.today_completed_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Today: 0 completed", None, "")
-        self.today_completed_item.setEnabled_(False)
-        self.today_completed_item.setHidden_(True)
-        menu.addItem_(self.today_completed_item)
-
-        menu.addItem_(NSMenuItem.separatorItem())
-
-        quit_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Quit", "quit:", "")
-        quit_item.setTarget_(self)
-        menu.addItem_(quit_item)
-
-        self.status_item.setMenu_(menu)
-
-    def refresh_(self, _timer: object) -> None:
-        """Timer callback: poll DB and update menu bar title and detail items."""
-        row = self.db.fetch_latest_interval()
+    def _refresh(self) -> None:
+        """Poll DB and update menu bar title and menu items."""
+        row = self._db.fetch_latest_interval()
         now = int(time.time())
-        today_completed = self.db.count_today_completed(now)
+        today_completed = self._db.count_today_completed(now)
 
-        self.status_item.setTitle_(_format_title(row, today_completed))
+        self._app.title = _format_title(row, today_completed)
 
         # Today's completed count
         if today_completed > 0:
-            self.today_completed_item.setTitle_(f"Today: {today_completed} completed")
-            self.today_completed_item.setHidden_(False)
+            self._today_item.title = f"Today: {today_completed} completed"
+            self._today_item.hidden = False
         else:
-            self.today_completed_item.setHidden_(True)
+            self._today_item.hidden = True
 
-        # Action items visibility
+        # Action items visibility + re-enable after CLI execution
         status_key = row.status if row is not None and row.status in ACTIVE_STATUSES else None
         if status_key is None:
-            duration_sec = parse_duration(self.cfg.default_duration) or 0
-            self.start_item.setTitle_(f"Start ({format_mmss(duration_sec)})")
-        start_hidden, pause_hidden, resume_hidden = _ACTION_VISIBILITY[status_key]
-        self.start_item.setHidden_(start_hidden)
-        self.pause_item.setHidden_(pause_hidden)
-        self.resume_item.setHidden_(resume_hidden)
+            duration_sec = parse_duration(self._cfg.default_duration) or 0
+            self._actions["start"].title = f"Start ({format_mmss(duration_sec)})"
+        visible = _VISIBLE_ACTIONS[status_key]
+        for name, item in self._actions.items():
+            item.hidden = name not in visible
+            item.enabled = True
 
         # Info items
         if row is not None and row.status in ACTIVE_STATUSES:
             effective = row.effective_worked(now)
             remaining = max(0, row.duration_sec - effective)
-            self.status_menu_item.setTitle_(f"Status: {row.status}")
-            self.duration_item.setTitle_(f"Duration: {format_mmss(row.duration_sec)}")
-            self.duration_item.setHidden_(False)
-            self.worked_item.setTitle_(f"Worked: {format_mmss(effective)}")
-            self.worked_item.setHidden_(False)
-            self.left_item.setTitle_(f"Left: {format_mmss(remaining)}")
-            self.left_item.setHidden_(False)
+            self._status_item.title = f"Status: {row.status}"
+            self._duration_item.title = f"Duration: {format_mmss(row.duration_sec)}"
+            self._duration_item.hidden = False
+            self._worked_item.title = f"Worked: {format_mmss(effective)}"
+            self._worked_item.hidden = False
+            self._left_item.title = f"Left: {format_mmss(remaining)}"
+            self._left_item.hidden = False
         else:
-            self.status_menu_item.setTitle_("No active interval")
-            self.duration_item.setHidden_(True)
-            self.worked_item.setHidden_(True)
-            self.left_item.setHidden_(True)
+            self._status_item.title = "No active interval"
+            self._duration_item.hidden = True
+            self._worked_item.hidden = True
+            self._left_item.hidden = True
 
-    def startPomodoro_(self, _sender: object) -> None:  # noqa: N802
-        """Start a new pomodoro interval."""
-        _run_cli(self, "start")
+    def _run_action(self, command: str) -> None:
+        """Disable action items and run CLI command in a background thread."""
+        for item in self._actions.values():
+            item.enabled = False
 
-    def pausePomodoro_(self, _sender: object) -> None:  # noqa: N802
-        """Pause the running interval."""
-        _run_cli(self, "pause")
+        def task() -> None:
+            # S603/S607: args are controlled literals, "mb-pomodoro" is our own CLI entry point
+            subprocess.run(  # noqa: S603  # nosec B603, B607
+                ["mb-pomodoro", "--data-dir", str(self._cfg.data_dir), "--json", command],  # noqa: S607
+                capture_output=True,
+                check=False,
+            )
+            self._app.run_on_main_thread(self._refresh)
 
-    def resumePomodoro_(self, _sender: object) -> None:  # noqa: N802
-        """Resume a paused or interrupted interval."""
-        _run_cli(self, "resume")
-
-    def quit_(self, _sender: object) -> None:
-        """Quit menu item callback."""
-        NSApplication.sharedApplication().terminate_(None)
-
-
-def _run_cli(delegate: _TrayDelegate, command: str) -> None:
-    """Run a CLI command in a background thread, then refresh the menu."""
-    data_dir = str(delegate.cfg.data_dir)
-
-    def _task() -> None:
-        # S603/S607: args are controlled literals, "mb-pomodoro" is our own CLI entry point
-        subprocess.run(  # noqa: S603
-            ["mb-pomodoro", "--data-dir", data_dir, "--json", command],  # noqa: S607
-            capture_output=True,
-            check=False,
-        )
-        delegate.performSelectorOnMainThread_withObject_waitUntilDone_("refresh:", None, False)
-
-    threading.Thread(target=_task, daemon=True).start()
-
-
-def _run_tray(db: Db, cfg: Config) -> None:
-    """Set up NSStatusBar item and run the event loop."""
-    nsapp = NSApplication.sharedApplication()
-    nsapp.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
-
-    status_item = NSStatusBar.systemStatusBar().statusItemWithLength_(-1)
-    status_item.setTitle_("\u25c7")
-
-    delegate = _TrayDelegate.alloc().initWithDb_cfg_statusItem_(db, cfg, status_item)
-    delegate.buildMenu()
-
-    # Polling timer
-    timer = NSTimer.alloc().initWithFireDate_interval_target_selector_userInfo_repeats_(
-        NSDate.date(), _POLL_INTERVAL_SEC, delegate, "refresh:", None, True
-    )
-    NSRunLoop.currentRunLoop().addTimer_forMode_(timer, NSDefaultRunLoopMode)
-
-    nsapp.setDelegate_(delegate)
-    AppHelper.installMachInterrupt()
-    AppHelper.runEventLoop()
+        threading.Thread(target=task, daemon=True).start()
 
 
 def _stop_tray(ctx: typer.Context) -> None:
@@ -272,7 +192,7 @@ def _run_foreground(ctx: typer.Context) -> None:
     tray_db = Db(cfg.db_path)
     write_pid_file(tray_pid_path)
     try:
-        _run_tray(tray_db, cfg)
+        _TrayController(tray_db, cfg).run()
     finally:
         tray_pid_path.unlink(missing_ok=True)
         tray_db.close()
