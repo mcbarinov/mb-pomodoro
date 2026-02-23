@@ -2,7 +2,6 @@
 
 import logging
 import time
-import uuid
 from typing import Annotated
 
 import typer
@@ -36,14 +35,14 @@ def start(
         app.out.print_interval_error_and_exit("ACTIVE_INTERVAL_EXISTS", "An active interval already exists.", latest)
 
     # Create new interval
-    interval_id = str(uuid.uuid4())
     now = int(time.time())
 
-    if not app.db.insert_interval(interval_id, duration_sec, now):
+    interval_id = app.db.insert_interval(duration_sec, now)
+    if interval_id is None:
         logger.warning("Start rejected: concurrent interval creation race")
         app.out.print_error_and_exit("ACTIVE_INTERVAL_EXISTS", "Another interval was started concurrently.")
 
     spawn_timer_worker(interval_id, app.cfg.data_dir)
 
-    logger.info("Interval started id=%s duration=%ds", interval_id, duration_sec)
+    logger.info("Interval started id=%d duration=%ds", interval_id, duration_sec)
     app.out.print_started(StartResult(interval_id=interval_id, duration_sec=duration_sec, started_at=now))

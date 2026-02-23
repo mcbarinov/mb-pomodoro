@@ -19,7 +19,7 @@ _HEARTBEAT_INTERVAL_SEC = 10
 
 def worker(
     ctx: typer.Context,
-    interval_id: Annotated[str, typer.Argument(help="Interval UUID to track.")],
+    interval_id: Annotated[int, typer.Argument(help="Interval ID to track.")],
 ) -> None:
     """Run background timer worker. Not intended for manual use."""
     app = use_context(ctx)

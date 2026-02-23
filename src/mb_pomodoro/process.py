@@ -64,11 +64,11 @@ def build_cli_args(data_dir: Path) -> list[str]:
     return args
 
 
-def spawn_timer_worker(interval_id: str, data_dir: Path) -> None:
+def spawn_timer_worker(interval_id: int, data_dir: Path) -> None:
     """Launch the timer worker as a detached background process."""
     # S603/S607: args are controlled literals, "mb-pomodoro" is our own CLI entry point
     subprocess.Popen(  # noqa: S603  # nosec B603, B607
-        [*build_cli_args(data_dir), "worker", interval_id],
+        [*build_cli_args(data_dir), "worker", str(interval_id)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         stdin=subprocess.DEVNULL,

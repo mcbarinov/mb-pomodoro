@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class StartResult:
     """Result of a successful interval start."""
 
-    interval_id: str
+    interval_id: int
     duration_sec: int
     started_at: int
 
@@ -29,7 +29,7 @@ class StartResult:
 class PauseResult:
     """Result of a successful interval pause."""
 
-    interval_id: str
+    interval_id: int
     worked_sec: int
     remaining_sec: int
 
@@ -38,7 +38,7 @@ class PauseResult:
 class ResumeResult:
     """Result of a successful interval resume."""
 
-    interval_id: str
+    interval_id: int
     worked_sec: int
     remaining_sec: int
 
@@ -47,7 +47,7 @@ class ResumeResult:
 class CancelResult:
     """Result of a successful interval cancellation."""
 
-    interval_id: str
+    interval_id: int
     worked_sec: int
 
 
@@ -55,7 +55,7 @@ class CancelResult:
 class FinishResult:
     """Result of resolving a finished interval."""
 
-    interval_id: str
+    interval_id: int
     resolution: IntervalStatus
     worked_sec: int
 
@@ -64,7 +64,7 @@ class FinishResult:
 class StatusActiveResult:
     """Result of a status check when an interval is active."""
 
-    interval_id: str
+    interval_id: int
     status: IntervalStatus
     duration_sec: int
     worked_sec: int
@@ -84,7 +84,7 @@ class StatusInactiveResult:
 class HistoryItem:
     """Single interval entry in history output."""
 
-    interval_id: str
+    interval_id: int
     status: IntervalStatus
     duration_sec: int
     worked_sec: int

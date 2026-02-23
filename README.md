@@ -141,7 +141,7 @@ One row per work interval. Source of truth for current state.
 
 ```sql
 CREATE TABLE intervals (
-    id             TEXT PRIMARY KEY,           -- UUID
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
     duration_sec   INTEGER NOT NULL,           -- requested duration in seconds
     status         TEXT NOT NULL               -- current lifecycle status
         CHECK(status IN ('running','paused','finished','completed','abandoned','cancelled','interrupted')),
@@ -155,7 +155,7 @@ CREATE TABLE intervals (
 
 | Column | Description |
 |---|---|
-| `id` | UUID v4, assigned on `start`. |
+| `id` | Autoincrement integer, assigned on `start`. |
 | `duration_sec` | Requested interval length in seconds (e.g., 1500 for 25 minutes). |
 | `status` | Current lifecycle status. See [Interval Statuses](#interval-statuses). |
 | `started_at` | Unix timestamp when the interval was first created. Never changes. |
@@ -171,7 +171,7 @@ Append-only audit log. One row per state transition.
 ```sql
 CREATE TABLE interval_events (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    interval_id   TEXT NOT NULL REFERENCES intervals(id),
+    interval_id   INTEGER NOT NULL REFERENCES intervals(id),
     event_type    TEXT NOT NULL
         CHECK(event_type IN ('started','paused','resumed','finished','completed','abandoned','cancelled','interrupted')),
     event_at      INTEGER NOT NULL             -- event time (unix seconds)

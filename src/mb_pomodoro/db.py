@@ -18,7 +18,7 @@ def _migrate_v1(conn: sqlite3.Connection) -> None:
     """Create initial schema: intervals + interval_events tables and indexes."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS intervals (
-            id TEXT PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             duration_sec INTEGER NOT NULL,
             status TEXT NOT NULL
                 CHECK(status IN ('running','paused','finished','completed','abandoned','cancelled','interrupted')),
@@ -31,7 +31,7 @@ def _migrate_v1(conn: sqlite3.Connection) -> None:
 
         CREATE TABLE IF NOT EXISTS interval_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            interval_id TEXT NOT NULL REFERENCES intervals(id),
+            interval_id INTEGER NOT NULL REFERENCES intervals(id),
             event_type TEXT NOT NULL
                 CHECK(event_type IN ('started','paused','resumed','finished','completed','abandoned','cancelled','interrupted')),
             event_at INTEGER NOT NULL
@@ -101,7 +101,7 @@ class EventType(StrEnum):
 class IntervalRow:
     """Interval row projection."""
 
-    id: str
+    id: int
     status: IntervalStatus
     duration_sec: int
     worked_sec: int
@@ -121,7 +121,7 @@ class IntervalRow:
 _SELECT_INTERVAL = "SELECT id, status, duration_sec, worked_sec, run_started_at, started_at, heartbeat_at FROM intervals"
 
 
-def _to_interval_row(row: tuple[str, str, int, int, int | None, int, int | None]) -> IntervalRow:
+def _to_interval_row(row: tuple[int, str, int, int, int | None, int, int | None]) -> IntervalRow:
     """Convert a raw SQL row tuple to an IntervalRow with enum conversion."""
     return IntervalRow(
         id=row[0],
@@ -156,7 +156,7 @@ class Db:
 
     # --- Private ---
 
-    def _insert_event(self, interval_id: str, event_type: EventType, event_at: int) -> None:
+    def _insert_event(self, interval_id: int, event_type: EventType, event_at: int) -> None:
         """Insert a row into interval_events."""
         self._conn.execute(
             "INSERT INTO interval_events (interval_id, event_type, event_at) VALUES (?, ?, ?)",
@@ -170,7 +170,7 @@ class Db:
         row = self._conn.execute(_SELECT_INTERVAL + " ORDER BY started_at DESC LIMIT 1").fetchone()
         return _to_interval_row(row) if row else None
 
-    def fetch_interval(self, interval_id: str) -> IntervalRow | None:
+    def fetch_interval(self, interval_id: int) -> IntervalRow | None:
         """Return an interval by id, or None."""
         row = self._conn.execute(_SELECT_INTERVAL + " WHERE id = ?", (interval_id,)).fetchone()
         return _to_interval_row(row) if row else None
@@ -201,21 +201,25 @@ class Db:
 
     # --- Mutations ---
 
-    def insert_interval(self, interval_id: str, duration_sec: int, now: int) -> bool:
-        """Create a new running interval with 'started' event. Return False on IntegrityError."""
+    def insert_interval(self, duration_sec: int, now: int) -> int | None:
+        """Create a new running interval with 'started' event. Return the new row ID, or None on IntegrityError."""
         try:
-            self._conn.execute(
-                "INSERT INTO intervals (id, duration_sec, status, started_at, worked_sec, run_started_at)"
-                " VALUES (?, ?, 'running', ?, 0, ?)",
-                (interval_id, duration_sec, now, now),
+            cursor = self._conn.execute(
+                "INSERT INTO intervals (duration_sec, status, started_at, worked_sec, run_started_at)"
+                " VALUES (?, 'running', ?, 0, ?)",
+                (duration_sec, now, now),
             )
+            interval_id = cursor.lastrowid
+            if interval_id is None:
+                self._conn.rollback()
+                return None
             self._insert_event(interval_id, EventType.STARTED, now)
             self._conn.commit()
         except sqlite3.IntegrityError:
-            return False
-        return True
+            return None
+        return interval_id
 
-    def finish_interval(self, interval_id: str, duration_sec: int, now: int) -> bool:
+    def finish_interval(self, interval_id: int, duration_sec: int, now: int) -> bool:
         """Mark running interval as finished (awaiting resolution). Return False if rowcount == 0."""
         cursor = self._conn.execute(
             "UPDATE intervals SET status = 'finished', worked_sec = ?, ended_at = ?,"
@@ -229,7 +233,7 @@ class Db:
         self._conn.commit()
         return True
 
-    def resolve_interval(self, interval_id: str, resolution: IntervalStatus, now: int) -> bool:
+    def resolve_interval(self, interval_id: int, resolution: IntervalStatus, now: int) -> bool:
         """Resolve a finished interval as 'completed' or 'abandoned'. Return False if rowcount == 0.
 
         Note: does not update ended_at — that records when the timer elapsed (set by finish_interval),
@@ -246,7 +250,7 @@ class Db:
         self._conn.commit()
         return True
 
-    def pause_interval(self, interval_id: str, worked_sec: int, now: int) -> bool:
+    def pause_interval(self, interval_id: int, worked_sec: int, now: int) -> bool:
         """Pause a running interval. Return False if no running interval was updated."""
         cursor = self._conn.execute(
             "UPDATE intervals SET status = 'paused', worked_sec = ?, run_started_at = NULL, heartbeat_at = NULL"
@@ -260,7 +264,7 @@ class Db:
         self._conn.commit()
         return True
 
-    def resume_interval(self, interval_id: str, now: int) -> bool:
+    def resume_interval(self, interval_id: int, now: int) -> bool:
         """Resume a paused interval. Return False if no paused interval was updated."""
         cursor = self._conn.execute(
             "UPDATE intervals SET status = 'running', run_started_at = ? WHERE id = ? AND status IN ('paused', 'interrupted')",
@@ -273,7 +277,7 @@ class Db:
         self._conn.commit()
         return True
 
-    def cancel_interval(self, interval_id: str, worked_sec: int, now: int) -> bool:
+    def cancel_interval(self, interval_id: int, worked_sec: int, now: int) -> bool:
         """Cancel a running or paused interval. Return False if no active interval was updated."""
         cursor = self._conn.execute(
             "UPDATE intervals SET status = 'cancelled', worked_sec = ?, ended_at = ?,"
@@ -287,12 +291,12 @@ class Db:
         self._conn.commit()
         return True
 
-    def update_heartbeat(self, interval_id: str, now: int) -> None:
+    def update_heartbeat(self, interval_id: int, now: int) -> None:
         """Update heartbeat timestamp for a running interval."""
         self._conn.execute("UPDATE intervals SET heartbeat_at = ? WHERE id = ? AND status = 'running'", (now, interval_id))
         self._conn.commit()
 
-    def recover_running_interval(self, interval_id: str, now: int) -> bool:
+    def recover_running_interval(self, interval_id: int, now: int) -> bool:
         """Mark running interval as interrupted, credit worked time from heartbeat, and insert 'interrupted' event.
 
         Uses heartbeat_at to recover work time accumulated before the crash.
