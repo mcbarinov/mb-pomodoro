@@ -32,7 +32,10 @@ def start(
     # Check for an existing active interval
     latest = app.db.fetch_latest_interval()
     if latest and latest.status in ACTIVE_STATUSES:
-        app.out.print_interval_error_and_exit("ACTIVE_INTERVAL_EXISTS", "An active interval already exists.", latest)
+        app.out.print_error_and_exit(
+            "ACTIVE_INTERVAL_EXISTS",
+            f"An active interval already exists. Latest interval: id={latest.id}, status={latest.status}.",
+        )
 
     # Create new interval
     now = int(time.time())

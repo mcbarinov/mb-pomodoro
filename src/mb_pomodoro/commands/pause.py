@@ -18,7 +18,10 @@ def pause(ctx: typer.Context) -> None:
 
     row = app.db.fetch_latest_interval()
     if row is None or row.status != IntervalStatus.RUNNING or row.run_started_at is None:
-        app.out.print_interval_error_and_exit("NOT_RUNNING", "No running interval to pause.", row)
+        msg = "No running interval to pause."
+        if row is not None:
+            msg = f"{msg} Latest interval: id={row.id}, status={row.status}."
+        app.out.print_error_and_exit("NOT_RUNNING", msg)
 
     now = int(time.time())
     new_worked = row.effective_worked(now)

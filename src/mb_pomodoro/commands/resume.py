@@ -19,7 +19,10 @@ def resume(ctx: typer.Context) -> None:
 
     row = app.db.fetch_latest_interval()
     if row is None or row.status not in (IntervalStatus.PAUSED, IntervalStatus.INTERRUPTED):
-        app.out.print_interval_error_and_exit("NOT_RESUMABLE", "No paused or interrupted interval to resume.", row)
+        msg = "No paused or interrupted interval to resume."
+        if row is not None:
+            msg = f"{msg} Latest interval: id={row.id}, status={row.status}."
+        app.out.print_error_and_exit("NOT_RESUMABLE", msg)
 
     now = int(time.time())
 

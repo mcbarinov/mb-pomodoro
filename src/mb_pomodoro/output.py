@@ -1,19 +1,12 @@
 """Structured output for CLI and JSON modes."""
 
-# ruff: noqa: T201 — this module is the output layer; print() is its sole mechanism for producing CLI output.
-
-import json
-import logging
-import sys
 from dataclasses import asdict, dataclass
-from typing import NoReturn
 
-import typer
+from mm_clikit import DualModeOutput
+from rich.table import Table
 
-from mb_pomodoro.db import IntervalRow, IntervalStatus
+from mb_pomodoro.db import IntervalStatus
 from mb_pomodoro.time_utils import format_datetime, format_mmss
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,119 +120,84 @@ class TrayStopResult:
     pid: int
 
 
-class Output:
+class Output(DualModeOutput):
     """Handles all CLI output in JSON or human-readable format."""
-
-    def __init__(self, *, json_mode: bool) -> None:
-        """Initialize output handler.
-
-        Args:
-            json_mode: If True, output JSON envelopes; otherwise human-readable text.
-
-        """
-        self._json_mode = json_mode
-
-    def _success(self, data: dict[str, object], message: str) -> None:
-        """Print a success result in JSON or human-readable format."""
-        if self._json_mode:
-            print(json.dumps({"ok": True, "data": data}))
-        else:
-            print(message)
-
-    def print_interval_error_and_exit(self, code: str, message: str, row: IntervalRow | None) -> NoReturn:
-        """Print an interval status error with context and exit."""
-        if row is not None:
-            message = f"{message} Latest interval: id={row.id}, status={row.status}."
-        self.print_error_and_exit(code, message)
-
-    def print_error_and_exit(self, code: str, message: str) -> NoReturn:
-        """Print an error in JSON or human-readable format and exit with code 1."""
-        logger.error("Command error: [%s] %s", code, message)
-        if self._json_mode:
-            print(json.dumps({"ok": False, "error": code, "message": message}))
-        else:
-            print(f"Error: {message}", file=sys.stderr)
-        raise typer.Exit(code=1)
 
     def print_started(self, result: StartResult) -> None:
         """Print interval start confirmation."""
-        self._success(asdict(result), f"Pomodoro started: {format_mmss(result.duration_sec)}.")
+        self.output(json_data=asdict(result), display_data=f"Pomodoro started: {format_mmss(result.duration_sec)}.")
 
     def print_paused(self, result: PauseResult) -> None:
         """Print interval pause confirmation."""
-        self._success(
-            asdict(result),
-            f"Paused. Worked: {format_mmss(result.worked_sec)}, left: {format_mmss(result.remaining_sec)}.",
+        self.output(
+            json_data=asdict(result),
+            display_data=f"Paused. Worked: {format_mmss(result.worked_sec)}, left: {format_mmss(result.remaining_sec)}.",
         )
 
     def print_resumed(self, result: ResumeResult) -> None:
         """Print interval resume confirmation."""
-        self._success(
-            asdict(result),
-            f"Resumed. Worked: {format_mmss(result.worked_sec)}, left: {format_mmss(result.remaining_sec)}.",
+        self.output(
+            json_data=asdict(result),
+            display_data=f"Resumed. Worked: {format_mmss(result.worked_sec)}, left: {format_mmss(result.remaining_sec)}.",
         )
 
     def print_cancelled(self, result: CancelResult) -> None:
         """Print interval cancellation confirmation."""
-        self._success(asdict(result), f"Cancelled. Worked: {format_mmss(result.worked_sec)}.")
+        self.output(json_data=asdict(result), display_data=f"Cancelled. Worked: {format_mmss(result.worked_sec)}.")
 
     def print_finished(self, result: FinishResult) -> None:
         """Print interval resolution confirmation."""
-        self._success(asdict(result), f"Interval marked as {result.resolution}. Worked: {format_mmss(result.worked_sec)}.")
+        self.output(
+            json_data=asdict(result),
+            display_data=f"Interval marked as {result.resolution}. Worked: {format_mmss(result.worked_sec)}.",
+        )
 
     def print_history(self, result: HistoryResult) -> None:
         """Print interval history as a table or JSON."""
-        if self._json_mode:
-            print(json.dumps({"ok": True, "data": {"intervals": [asdict(item) for item in result.intervals]}}))
-            return
-
+        json_data: dict[str, object] = {"intervals": [asdict(item) for item in result.intervals]}
         if not result.intervals:
-            print("No intervals found.")
+            self.output(json_data=json_data, display_data="No intervals found.")
             return
 
-        print(f"{'Date':<16}  {'Duration':>8}  {'Worked':>8}  {'Status':<9}")
-        print(f"{'-' * 16}  {'-' * 8}  {'-' * 8}  {'-' * 9}")
+        table = Table("Date", "Duration", "Worked", "Status")
         for item in result.intervals:
-            print(
-                f"{format_datetime(item.started_at):<16}  {format_mmss(item.duration_sec):>8}  "
-                f"{format_mmss(item.worked_sec):>8}  {item.status:<9}"
+            table.add_row(
+                format_datetime(item.started_at), format_mmss(item.duration_sec), format_mmss(item.worked_sec), str(item.status)
             )
+        self.output(json_data=json_data, display_data=table)
 
     def print_daily_history(self, result: DailyHistoryResult) -> None:
         """Print daily completed counts as a table or JSON."""
-        if self._json_mode:
-            print(json.dumps({"ok": True, "data": {"days": [asdict(item) for item in result.days]}}))
-            return
-
+        json_data: dict[str, object] = {"days": [asdict(item) for item in result.days]}
         if not result.days:
-            print("No completed intervals found.")
+            self.output(json_data=json_data, display_data="No completed intervals found.")
             return
 
-        print(f"{'Date':<10}  {'Completed':>9}")
-        print(f"{'-' * 10}  {'-' * 9}")
+        table = Table("Date", "Completed")
         for item in result.days:
-            print(f"{item.date:<10}  {item.completed:>9}")
+            table.add_row(item.date, str(item.completed))
+        self.output(json_data=json_data, display_data=table)
 
     def print_tray_started(self, result: TrayStartResult) -> None:
         """Print tray launch confirmation."""
-        self._success(asdict(result), f"Tray started (pid {result.pid}).")
+        self.output(json_data=asdict(result), display_data=f"Tray started (pid {result.pid}).")
 
     def print_tray_stopped(self, result: TrayStopResult) -> None:
         """Print tray stop confirmation."""
-        self._success(asdict(result), f"Tray stopped (pid {result.pid}).")
+        self.output(json_data=asdict(result), display_data=f"Tray stopped (pid {result.pid}).")
 
     def print_status(self, result: StatusActiveResult | StatusInactiveResult) -> None:
         """Print current timer status."""
         if isinstance(result, StatusInactiveResult):
-            self._success(
-                {"active": False, "today_completed": result.today_completed},
-                f"No active interval. Today: {result.today_completed} completed.",
+            self.output(
+                json_data={"active": False, "today_completed": result.today_completed},
+                display_data=f"No active interval. Today: {result.today_completed} completed.",
             )
             return
 
-        self._success(
-            {"active": True, **asdict(result)},
-            f"Status:   {result.status}\n"
+        self.output(
+            json_data={"active": True, **asdict(result)},
+            display_data=f"Status:   {result.status}\n"
             f"Duration: {format_mmss(result.duration_sec)}\n"
             f"Worked:   {format_mmss(result.worked_sec)}\n"
             f"Left:     {format_mmss(result.remaining_sec)}\n"

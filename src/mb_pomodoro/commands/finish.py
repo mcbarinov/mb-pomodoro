@@ -29,7 +29,10 @@ def finish(ctx: typer.Context, resolution: Annotated[str, typer.Argument(help=_R
 
     row = app.db.fetch_latest_interval()
     if row is None or row.status != IntervalStatus.FINISHED:
-        app.out.print_interval_error_and_exit("NOT_FINISHED", "No finished interval to resolve.", row)
+        msg = "No finished interval to resolve."
+        if row is not None:
+            msg = f"{msg} Latest interval: id={row.id}, status={row.status}."
+        app.out.print_error_and_exit("NOT_FINISHED", msg)
 
     now = int(time.time())
     if not app.db.resolve_interval(row.id, resolved_status, now):
