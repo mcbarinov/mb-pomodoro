@@ -1,6 +1,7 @@
 """Show current Pomodoro timer status."""
 
 import time
+from typing import Annotated
 
 import typer
 
@@ -9,7 +10,11 @@ from mb_pomodoro.db import ACTIVE_STATUSES
 from mb_pomodoro.output import StatusActiveResult, StatusInactiveResult
 
 
-def status(ctx: typer.Context) -> None:
+def status(
+    ctx: typer.Context,
+    *,
+    short: Annotated[bool, typer.Option("--short", help="Single-line output.")] = False,
+) -> None:
     """Show current Pomodoro timer status."""
     app = use_context(ctx)
 
@@ -18,7 +23,7 @@ def status(ctx: typer.Context) -> None:
     today_completed = app.db.count_today_completed(now)
 
     if row is None or row.status not in ACTIVE_STATUSES:
-        app.out.print_status(StatusInactiveResult(today_completed=today_completed))
+        app.out.print_status(StatusInactiveResult(today_completed=today_completed), short=short)
         return
 
     effective_worked = row.effective_worked(now)
@@ -33,5 +38,6 @@ def status(ctx: typer.Context) -> None:
             remaining_sec=remaining,
             started_at=row.started_at,
             today_completed=today_completed,
-        )
+        ),
+        short=short,
     )

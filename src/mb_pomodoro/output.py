@@ -186,7 +186,7 @@ class Output(DualModeOutput):
         """Print tray stop confirmation."""
         self.output(json_data=asdict(result), display_data=f"Tray stopped (pid {result.pid}).")
 
-    def print_status(self, result: StatusActiveResult | StatusInactiveResult) -> None:
+    def print_status(self, result: StatusActiveResult | StatusInactiveResult, *, short: bool = False) -> None:
         """Print current timer status."""
         if isinstance(result, StatusInactiveResult):
             self.output(
@@ -195,11 +195,19 @@ class Output(DualModeOutput):
             )
             return
 
-        self.output(
-            json_data={"active": True, **asdict(result)},
-            display_data=f"Status:   {result.status}\n"
-            f"Duration: {format_mmss(result.duration_sec)}\n"
-            f"Worked:   {format_mmss(result.worked_sec)}\n"
-            f"Left:     {format_mmss(result.remaining_sec)}\n"
-            f"Today:    {result.today_completed} completed",
-        )
+        if short:
+            display: str = (
+                f"{str(result.status).capitalize()}. "
+                f"Worked: {format_mmss(result.worked_sec)}, left: {format_mmss(result.remaining_sec)}. "
+                f"Today: {result.today_completed} completed."
+            )
+        else:
+            display = (
+                f"Status:   {result.status}\n"
+                f"Duration: {format_mmss(result.duration_sec)}\n"
+                f"Worked:   {format_mmss(result.worked_sec)}\n"
+                f"Left:     {format_mmss(result.remaining_sec)}\n"
+                f"Today:    {result.today_completed} completed"
+            )
+
+        self.output(json_data={"active": True, **asdict(result)}, display_data=display)
