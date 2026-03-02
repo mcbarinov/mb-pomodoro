@@ -32,3 +32,7 @@ publish: build
     printf "Enter PyPI token: " && IFS= read -rs TOKEN && echo && uv publish --token "$TOKEN"
     git tag -a 'v{{version}}' -m 'v{{version}}'
     git push origin v{{version}}
+
+install: build
+    uv tool uninstall mb-pomodoro || true
+    uv tool install dist/mb_pomodoro-*.whl

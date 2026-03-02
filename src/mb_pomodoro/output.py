@@ -189,18 +189,19 @@ class Output(DualModeOutput):
     def print_status(self, result: StatusActiveResult | StatusInactiveResult, *, short: bool = False) -> None:
         """Print current timer status."""
         if isinstance(result, StatusInactiveResult):
-            self.output(
-                json_data={"active": False, "today_completed": result.today_completed},
-                display_data=f"No active interval. Today: {result.today_completed} completed.",
+            display_data = (
+                f"No active interval · {result.today_completed} today"
+                if short
+                else f"No active interval. Today: {result.today_completed} completed."
             )
+            self.output(json_data={"active": False, "today_completed": result.today_completed}, display_data=display_data)
             return
 
         if short:
-            display: str = (
-                f"{str(result.status).capitalize()}. "
-                f"Worked: {format_mmss(result.worked_sec)}, left: {format_mmss(result.remaining_sec)}. "
-                f"Today: {result.today_completed} completed."
-            )
+            prefix = "" if result.status == IntervalStatus.RUNNING else f"{str(result.status).capitalize()} · "
+            left = format_mmss(result.remaining_sec)
+            worked = format_mmss(result.worked_sec)
+            display: str = f"{prefix}{left} left · {worked} worked · {result.today_completed} today"
         else:
             display = (
                 f"Status:   {result.status}\n"
