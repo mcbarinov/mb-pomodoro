@@ -1,6 +1,6 @@
 [project]
 name = "mb-pomodoro"
-version = "0.0.6"
+version = "0.0.7"
 description = "macOS Pomodoro timer with a CLI-first workflow"
 readme = "README.md"
 license = "MIT"

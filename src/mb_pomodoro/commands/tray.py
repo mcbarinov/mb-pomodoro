@@ -32,16 +32,18 @@ _VISIBLE_ACTIONS: dict[IntervalStatus | None, frozenset[str]] = {
 def _format_title(row: IntervalRow | None, today_completed: int) -> str:
     """Build the menu bar title string from the latest interval and today's count."""
     if row is None or row.status not in ACTIVE_STATUSES:
-        icon = "\u25c7"
-    elif row.status == IntervalStatus.FINISHED:
-        icon = "\u2713"
-    elif row.status in {IntervalStatus.PAUSED, IntervalStatus.INTERRUPTED}:
-        icon = "\u23f8"
-    else:
-        icon = "\u25b6"
-    if today_completed > 0:
-        return f"{icon} {today_completed}"
-    return icon
+        # Inactive: show completed count + diamond (e.g. "3◇"), or just diamond if 0
+        if today_completed > 0:
+            return f"{today_completed}\u25c7"
+        return "\u25c7"
+
+    # Active: show ordinal + state icon (e.g. "4▶" = working on 4th pomodoro)
+    ordinal = today_completed + 1
+    if row.status == IntervalStatus.FINISHED:
+        return f"{ordinal}\u2713"
+    if row.status in {IntervalStatus.PAUSED, IntervalStatus.INTERRUPTED}:
+        return f"{ordinal}\u23f8"
+    return f"{ordinal}\u25b6"
 
 
 class _TrayController:
