@@ -5,8 +5,8 @@ from dataclasses import dataclass
 import typer
 
 from mb_pomodoro.config import Config
-from mb_pomodoro.db import Db
 from mb_pomodoro.output import Output
+from mb_pomodoro.pomodoro import Pomodoro
 
 
 @dataclass(frozen=True, slots=True)
@@ -14,7 +14,7 @@ class AppContext:
     """Shared application state passed through Typer context."""
 
     out: Output
-    db: Db
+    pomodoro: Pomodoro
     cfg: Config
 
 

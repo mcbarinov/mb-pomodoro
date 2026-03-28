@@ -7,6 +7,24 @@ macOS-focused Pomodoro timer with a CLI-first workflow. Work intervals only — 
 - Persistent state and history in SQLite.
 - Background worker process tracks interval completion and sends macOS notifications.
 
+## Architecture
+
+### Layered Design
+
+```
+CLI commands (thin wrappers)
+    ↓
+Pomodoro service (business logic)
+    ↓
+Db (SQLite data access)
+```
+
+- **`Pomodoro`** (`pomodoro.py`) — central service class. All timer operations (start, pause, resume, cancel, finish, undo, status, history, crash recovery) go through this class. Owns state validation, time computation, and DB interaction. Raises `PomodoroError(code, message)` on failures with machine-readable error codes.
+- **`Db`** (`db.py`) — low-level data access object. Direct SQL queries and mutations. No business logic.
+- **CLI commands** (`commands/`) — thin wrappers that call `Pomodoro` methods, catch `PomodoroError`, and format output. Side effects like worker spawning and confirmation prompts stay in commands.
+- **Timer worker** (`commands/worker.py`) — background daemon that polls via `Pomodoro` methods (never touches `Db` directly).
+- **Tray** (`commands/tray.py`) — menu bar icon with its own `Pomodoro` instance (separate DB connection).
+
 ## Timer Algorithm
 
 ### Interval Statuses

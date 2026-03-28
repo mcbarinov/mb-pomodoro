@@ -1,12 +1,10 @@
 """Show Pomodoro session history."""
 
-import time
 from typing import Annotated
 
 import typer
 
 from mb_pomodoro.app_context import use_context
-from mb_pomodoro.output import DailyHistoryItem, DailyHistoryResult, HistoryItem, HistoryResult
 
 
 def history(
@@ -18,25 +16,9 @@ def history(
     app = use_context(ctx)
 
     if daily:
-        rows = app.db.fetch_daily_completed(limit)
-        items = [DailyHistoryItem(date=date, completed=count) for date, count in rows]
-        app.out.print_daily_history(DailyHistoryResult(days=items))
+        daily_result = app.pomodoro.daily_history(limit)
+        app.out.print_daily_history(daily_result)
         return
 
-    interval_rows = app.db.fetch_history(limit)
-
-    now = int(time.time())
-    history_items: list[HistoryItem] = []
-    for row in interval_rows:
-        effective_worked = row.effective_worked(now)
-        history_items.append(
-            HistoryItem(
-                interval_id=row.id,
-                status=row.status,
-                duration_sec=row.duration_sec,
-                worked_sec=effective_worked,
-                started_at=row.started_at,
-            )
-        )
-
-    app.out.print_history(HistoryResult(intervals=history_items))
+    history_result = app.pomodoro.history(limit)
+    app.out.print_history(history_result)

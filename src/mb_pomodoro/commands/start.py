@@ -1,18 +1,12 @@
 """Start a new Pomodoro interval."""
 
-import logging
-import time
 from typing import Annotated
 
 import typer
 from mm_clikit import spawn_daemon
 
 from mb_pomodoro.app_context import use_context
-from mb_pomodoro.db import ACTIVE_STATUSES
-from mb_pomodoro.output import StartResult
-from mb_pomodoro.time_utils import parse_duration
-
-logger = logging.getLogger(__name__)
+from mb_pomodoro.pomodoro import PomodoroError
 
 
 def start(
@@ -22,30 +16,10 @@ def start(
     """Start a new Pomodoro interval."""
     app = use_context(ctx)
 
-    if duration is None:
-        duration = app.cfg.default_duration
-    duration_sec = parse_duration(duration)
-    if duration_sec is None or duration_sec <= 0:
-        logger.warning("Invalid duration input: %s", duration)
-        app.out.print_error_and_exit("INVALID_DURATION", f"Invalid duration: {duration}. Examples: 25, 25m, 90s, 10m30s.")
+    try:
+        result = app.pomodoro.start(duration)
+    except PomodoroError as e:
+        app.out.print_error_and_exit(e.code, str(e))
 
-    # Check for an existing active interval
-    latest = app.db.fetch_latest_interval()
-    if latest and latest.status in ACTIVE_STATUSES:
-        app.out.print_error_and_exit(
-            "ACTIVE_INTERVAL_EXISTS",
-            f"An active interval already exists. Latest interval: id={latest.id}, status={latest.status}.",
-        )
-
-    # Create new interval
-    now = int(time.time())
-
-    interval_id = app.db.insert_interval(duration_sec, now)
-    if interval_id is None:
-        logger.warning("Start rejected: concurrent interval creation race")
-        app.out.print_error_and_exit("ACTIVE_INTERVAL_EXISTS", "Another interval was started concurrently.")
-
-    spawn_daemon([*app.cfg.cli_base_args(), "worker", str(interval_id)])
-
-    logger.info("Interval started id=%d duration=%ds", interval_id, duration_sec)
-    app.out.print_started(StartResult(interval_id=interval_id, duration_sec=duration_sec, started_at=now))
+    spawn_daemon([*app.cfg.cli_base_args(), "worker", str(result.interval_id)])
+    app.out.print_started(result)

@@ -13,6 +13,7 @@ from mb_pomodoro.app_context import use_context
 from mb_pomodoro.config import Config
 from mb_pomodoro.db import ACTIVE_STATUSES, Db, IntervalRow, IntervalStatus
 from mb_pomodoro.output import TrayStartResult, TrayStopResult
+from mb_pomodoro.pomodoro import Pomodoro
 from mb_pomodoro.time_utils import format_mmss, parse_duration
 
 _POLL_INTERVAL_SEC = 2.0
@@ -49,8 +50,8 @@ def _format_title(row: IntervalRow | None, today_completed: int) -> str:
 class _TrayController:
     """Manages tray app lifecycle: menu items, polling, and CLI actions."""
 
-    def __init__(self, db: Db, cfg: Config) -> None:
-        self._db = db
+    def __init__(self, pomodoro: Pomodoro, cfg: Config) -> None:
+        self._pomodoro = pomodoro
         self._cfg = cfg
         self._app = TrayApp(title="\u25c7")
 
@@ -91,9 +92,9 @@ class _TrayController:
 
     def _refresh(self) -> None:
         """Poll DB and update menu bar title and menu items."""
-        row = self._db.fetch_latest_interval()
+        row = self._pomodoro.fetch_latest_interval()
         now = int(time.time())
-        today_completed = self._db.count_today_completed(now)
+        today_completed = self._pomodoro.count_today_completed(now)
 
         self._app.title = _format_title(row, today_completed)
 
@@ -174,9 +175,10 @@ def _run_foreground(ctx: typer.Context) -> None:
 
     # Separate DB connection — the tray outlives the CLI context lifecycle
     tray_db = Db(cfg.db_path)
+    tray_pomodoro = Pomodoro(tray_db, cfg)
     write_pid_file(tray_pid_path)
     try:
-        _TrayController(tray_db, cfg).run()
+        _TrayController(tray_pomodoro, cfg).run()
     finally:
         tray_pid_path.unlink(missing_ok=True)
         tray_db.close()

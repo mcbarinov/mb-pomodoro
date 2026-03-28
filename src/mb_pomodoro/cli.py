@@ -23,7 +23,7 @@ from mb_pomodoro.config import Config
 from mb_pomodoro.db import Db
 from mb_pomodoro.log import setup_logging
 from mb_pomodoro.output import Output
-from mb_pomodoro.recovery import recover_stale_interval
+from mb_pomodoro.pomodoro import Pomodoro
 
 app = TyperPlus(package_name="mb-pomodoro")
 
@@ -51,9 +51,10 @@ def main(
     setup_logging(cfg.log_path)
     db = Db(cfg.db_path)
     ctx.call_on_close(db.close)
+    pomodoro = Pomodoro(db, cfg)
     if ctx.invoked_subcommand not in {"worker", "tray"}:
-        recover_stale_interval(db, cfg.timer_worker_pid_path)
-    ctx.obj = AppContext(out=Output(json_mode=json_output), db=db, cfg=cfg)
+        pomodoro.recover_stale()
+    ctx.obj = AppContext(out=Output(json_mode=json_output), pomodoro=pomodoro, cfg=cfg)
 
 
 app.command()(start)
