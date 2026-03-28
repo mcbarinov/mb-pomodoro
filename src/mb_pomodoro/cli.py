@@ -17,6 +17,7 @@ from mb_pomodoro.commands.resume import resume
 from mb_pomodoro.commands.start import start
 from mb_pomodoro.commands.status import status
 from mb_pomodoro.commands.tray import tray
+from mb_pomodoro.commands.undo_start import undo_start
 from mb_pomodoro.commands.worker import worker
 from mb_pomodoro.config import Config
 from mb_pomodoro.db import Db
@@ -59,6 +60,7 @@ app.command()(start)
 app.command(aliases=["p"])(pause)
 app.command(aliases=["r"])(resume)
 app.command()(cancel)
+app.command(name="undo-start")(undo_start)
 app.command()(finish)
 app.command(aliases=["h"])(history)
 app.command(aliases=["s"])(status)

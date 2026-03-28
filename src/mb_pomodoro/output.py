@@ -45,6 +45,13 @@ class CancelResult:
 
 
 @dataclass(frozen=True, slots=True)
+class UndoStartResult:
+    """Result of permanently deleting an accidentally started interval."""
+
+    interval_id: int
+
+
+@dataclass(frozen=True, slots=True)
 class FinishResult:
     """Result of resolving a finished interval."""
 
@@ -144,6 +151,10 @@ class Output(DualModeOutput):
     def print_cancelled(self, result: CancelResult) -> None:
         """Print interval cancellation confirmation."""
         self.output(json_data=asdict(result), display_data=f"Cancelled. Worked: {format_mmss(result.worked_sec)}.")
+
+    def print_undo_start(self, result: UndoStartResult) -> None:
+        """Print interval deletion confirmation."""
+        self.output(json_data=asdict(result), display_data=f"Interval {result.interval_id} deleted.")
 
     def print_finished(self, result: FinishResult) -> None:
         """Print interval resolution confirmation."""

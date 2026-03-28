@@ -291,6 +291,12 @@ class Db:
         self._conn.commit()
         return True
 
+    def delete_interval(self, interval_id: int) -> None:
+        """Permanently delete an interval and all its events."""
+        self._conn.execute("DELETE FROM interval_events WHERE interval_id = ?", (interval_id,))
+        self._conn.execute("DELETE FROM intervals WHERE id = ?", (interval_id,))
+        self._conn.commit()
+
     def update_heartbeat(self, interval_id: int, now: int) -> None:
         """Update heartbeat timestamp for a running interval."""
         self._conn.execute("UPDATE intervals SET heartbeat_at = ? WHERE id = ? AND status = 'running'", (now, interval_id))

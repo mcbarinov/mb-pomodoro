@@ -276,6 +276,25 @@ $ mb-pomodoro cancel
 Cancelled. Worked: 08:15.
 ```
 
+### `undo-start`
+
+Permanently delete the active interval, as if it never existed. Use when a timer was started by mistake.
+
+- Valid only from `running`.
+- Requires interactive confirmation (type "yes") unless `--yes`/`-y` flag is provided.
+- In `--json` mode, `--yes` is required.
+- Completely removes the interval and all its events from the database.
+
+```
+$ mb-pomodoro undo-start
+Active interval: 25:00, running, worked 01:30 (01:30 since start).
+Type 'yes' to permanently delete this interval: yes
+Interval 42 deleted.
+
+$ mb-pomodoro undo-start -y
+Interval 43 deleted.
+```
+
 ### `finish <resolution>`
 
 Manually resolve a finished interval. Fallback for when the macOS completion dialog was missed or timed out.
