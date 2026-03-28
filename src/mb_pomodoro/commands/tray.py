@@ -6,7 +6,7 @@ import time
 from typing import Annotated
 
 import typer
-from mm_clikit import is_process_running, read_pid_file, spawn_detached, stop_process, write_pid_file
+from mm_clikit import is_process_running, read_pid_file, spawn_daemon, stop_process, write_pid_file
 from mm_pymac import MenuItem, MenuSeparator, TrayApp
 
 from mb_pomodoro.app_context import use_context
@@ -191,7 +191,7 @@ def _launch_background(ctx: typer.Context) -> None:
         pid = read_pid_file(cfg.tray_pid_path)
         app.out.print_error_and_exit("TRAY_ALREADY_RUNNING", f"Tray is already running (pid {pid}).")
 
-    pid = spawn_detached([*cfg.cli_base_args(), "tray", "--run"])
+    pid = spawn_daemon([*cfg.cli_base_args(), "tray", "--run"])
 
     # Brief wait to verify the process is alive
     time.sleep(_LAUNCH_VERIFY_SEC)

@@ -5,7 +5,7 @@ import time
 from typing import Annotated
 
 import typer
-from mm_clikit import spawn_detached
+from mm_clikit import spawn_daemon
 
 from mb_pomodoro.app_context import use_context
 from mb_pomodoro.db import ACTIVE_STATUSES
@@ -45,7 +45,7 @@ def start(
         logger.warning("Start rejected: concurrent interval creation race")
         app.out.print_error_and_exit("ACTIVE_INTERVAL_EXISTS", "Another interval was started concurrently.")
 
-    spawn_detached([*app.cfg.cli_base_args(), "worker", str(interval_id)])
+    spawn_daemon([*app.cfg.cli_base_args(), "worker", str(interval_id)])
 
     logger.info("Interval started id=%d duration=%ds", interval_id, duration_sec)
     app.out.print_started(StartResult(interval_id=interval_id, duration_sec=duration_sec, started_at=now))

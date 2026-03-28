@@ -4,7 +4,7 @@ import logging
 import time
 
 import typer
-from mm_clikit import spawn_detached
+from mm_clikit import spawn_daemon
 
 from mb_pomodoro.app_context import use_context
 from mb_pomodoro.db import IntervalStatus
@@ -30,7 +30,7 @@ def resume(ctx: typer.Context) -> None:
         logger.warning("Resume rejected: concurrent modification id=%s", row.id)
         app.out.print_error_and_exit("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
 
-    spawn_detached([*app.cfg.cli_base_args(), "worker", str(row.id)])
+    spawn_daemon([*app.cfg.cli_base_args(), "worker", str(row.id)])
 
     remaining = row.duration_sec - row.worked_sec
     logger.info("Interval resumed id=%s worked=%ds remaining=%ds", row.id, row.worked_sec, remaining)
