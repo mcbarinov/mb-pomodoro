@@ -10,14 +10,15 @@ from mm_clikit import TyperPlus, get_json_mode
 
 from mb_pomodoro.app_context import AppContext
 from mb_pomodoro.commands.cancel import cancel
+from mb_pomodoro.commands.delete import delete
 from mb_pomodoro.commands.finish import finish
 from mb_pomodoro.commands.history import history
 from mb_pomodoro.commands.pause import pause
+from mb_pomodoro.commands.re_resolve import re_resolve
 from mb_pomodoro.commands.resume import resume
 from mb_pomodoro.commands.start import start
 from mb_pomodoro.commands.status import status
 from mb_pomodoro.commands.tray import tray
-from mb_pomodoro.commands.undo_start import undo_start
 from mb_pomodoro.commands.worker import worker
 from mb_pomodoro.config import Config
 from mb_pomodoro.db import Db
@@ -60,8 +61,9 @@ app.command()(start)
 app.command(aliases=["p"])(pause)
 app.command(aliases=["r"])(resume)
 app.command()(cancel)
-app.command(name="undo-start")(undo_start)
 app.command()(finish)
+app.command()(delete)
+app.command(name="re-resolve")(re_resolve)
 app.command(aliases=["h"])(history)
 app.command(aliases=["s"])(status)
 app.command()(tray)

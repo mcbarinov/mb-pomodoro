@@ -291,6 +291,19 @@ class Db:
         self._conn.commit()
         return True
 
+    def re_resolve_interval(self, interval_id: int, new_resolution: IntervalStatus, now: int) -> bool:
+        """Change the resolution of a completed or abandoned interval. Return False if rowcount == 0."""
+        cursor = self._conn.execute(
+            "UPDATE intervals SET status = ? WHERE id = ? AND status IN ('completed', 'abandoned')",
+            (new_resolution, interval_id),
+        )
+        if cursor.rowcount == 0:
+            self._conn.rollback()
+            return False
+        self._insert_event(interval_id, EventType(new_resolution), now)
+        self._conn.commit()
+        return True
+
     def delete_interval(self, interval_id: int) -> None:
         """Permanently delete an interval and all its events."""
         self._conn.execute("DELETE FROM interval_events WHERE interval_id = ?", (interval_id,))

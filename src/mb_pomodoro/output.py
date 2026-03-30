@@ -45,10 +45,24 @@ class CancelResult:
 
 
 @dataclass(frozen=True, slots=True)
-class UndoStartResult:
-    """Result of permanently deleting an accidentally started interval."""
+class DeleteResult:
+    """Result of permanently deleting an interval."""
 
     interval_id: int
+    status: IntervalStatus
+    duration_sec: int
+    worked_sec: int
+    started_at: int
+
+
+@dataclass(frozen=True, slots=True)
+class ReResolveResult:
+    """Result of changing an interval's resolution."""
+
+    interval_id: int
+    old_resolution: IntervalStatus
+    new_resolution: IntervalStatus
+    worked_sec: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,9 +166,19 @@ class Output(DualModeOutput):
         """Print interval cancellation confirmation."""
         self.output(json_data=asdict(result), display_data=f"Cancelled. Worked: {format_mmss(result.worked_sec)}.")
 
-    def print_undo_start(self, result: UndoStartResult) -> None:
+    def print_deleted(self, result: DeleteResult) -> None:
         """Print interval deletion confirmation."""
-        self.output(json_data=asdict(result), display_data=f"Interval {result.interval_id} deleted.")
+        self.output(
+            json_data=asdict(result),
+            display_data=f"Interval {result.interval_id} deleted (was {result.status}, {format_mmss(result.worked_sec)} worked).",
+        )
+
+    def print_re_resolved(self, result: ReResolveResult) -> None:
+        """Print interval re-resolution confirmation."""
+        self.output(
+            json_data=asdict(result),
+            display_data=f"Interval {result.interval_id} changed from {result.old_resolution} to {result.new_resolution}.",
+        )
 
     def print_finished(self, result: FinishResult) -> None:
         """Print interval resolution confirmation."""

@@ -11,15 +11,16 @@ from mb_pomodoro.output import (
     CancelResult,
     DailyHistoryItem,
     DailyHistoryResult,
+    DeleteResult,
     FinishResult,
     HistoryItem,
     HistoryResult,
     PauseResult,
+    ReResolveResult,
     ResumeResult,
     StartResult,
     StatusActiveResult,
     StatusInactiveResult,
-    UndoStartResult,
 )
 from mb_pomodoro.time_utils import parse_duration
 
@@ -210,26 +211,84 @@ class Pomodoro:
         logger.info("Interval resolved id=%s resolution=%s", row.id, resolved_status)
         return FinishResult(interval_id=row.id, resolution=resolved_status, worked_sec=row.worked_sec)
 
-    def undo_start(self) -> UndoStartResult:
-        """Permanently delete the active running interval.
+    def delete_interval(self, interval_id: int | None = None) -> DeleteResult:
+        """Permanently delete an interval.
+
+        Args:
+            interval_id: Interval ID to delete. If None, deletes the latest interval.
 
         Returns:
-            Undo-start result with deleted interval ID.
+            Delete result with deleted interval metadata.
 
         Raises:
-            PomodoroError: If no running interval.
+            PomodoroError: If interval not found.
 
         """
-        row = self._db.fetch_latest_interval()
-        if row is None or row.status != IntervalStatus.RUNNING:
-            msg = "No running interval to undo."
-            if row is not None:
-                msg = f"{msg} Latest interval: id={row.id}, status={row.status}."
-            raise PomodoroError("NOT_RUNNING", msg)
+        if interval_id is not None:
+            row = self._db.fetch_interval(interval_id)
+            if row is None:
+                raise PomodoroError("INTERVAL_NOT_FOUND", f"No interval with id {interval_id}.")
+        else:
+            row = self._db.fetch_latest_interval()
+            if row is None:
+                raise PomodoroError("INTERVAL_NOT_FOUND", "No intervals found.")
 
+        now = int(time.time())
+        worked = row.effective_worked(now)
+        # No need to kill the worker: it polls fetch_interval() every ~1s,
+        # gets None for the deleted row, and exits cleanly. All worker writes
+        # (heartbeat, finish) target a specific id+status, so they no-op on a missing row.
         self._db.delete_interval(row.id)
-        logger.info("Interval deleted (undo-start) id=%s worked=%ds", row.id, row.effective_worked(int(time.time())))
-        return UndoStartResult(interval_id=row.id)
+        logger.info("Interval deleted id=%s status=%s worked=%ds", row.id, row.status, worked)
+        return DeleteResult(
+            interval_id=row.id,
+            status=row.status,
+            duration_sec=row.duration_sec,
+            worked_sec=worked,
+            started_at=row.started_at,
+        )
+
+    def re_resolve(self, interval_id: int, resolution: str) -> ReResolveResult:
+        """Change the resolution of a completed or abandoned interval.
+
+        Args:
+            interval_id: Interval ID to re-resolve.
+            resolution: New resolution: 'completed' or 'abandoned'.
+
+        Returns:
+            Re-resolve result with old and new resolution.
+
+        Raises:
+            PomodoroError: On invalid resolution, wrong status, same status, or concurrent modification.
+
+        """
+        if resolution not in (IntervalStatus.COMPLETED, IntervalStatus.ABANDONED):
+            raise PomodoroError("INVALID_RESOLUTION", "Resolution must be 'completed' or 'abandoned'.")
+        new_status = IntervalStatus(resolution)
+
+        row = self._db.fetch_interval(interval_id)
+        if row is None:
+            raise PomodoroError("INTERVAL_NOT_FOUND", f"No interval with id {interval_id}.")
+        if row.status not in (IntervalStatus.COMPLETED, IntervalStatus.ABANDONED):
+            raise PomodoroError(
+                "NOT_RE_RESOLVABLE",
+                f"Interval {interval_id} has status '{row.status}'; only completed or abandoned intervals can be re-resolved.",
+            )
+        if row.status == new_status:
+            raise PomodoroError("ALREADY_RESOLVED", f"Interval {interval_id} is already {resolution}.")
+
+        now = int(time.time())
+        if not self._db.re_resolve_interval(row.id, new_status, now):
+            logger.warning("Re-resolve rejected: concurrent modification id=%s", row.id)
+            raise PomodoroError("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
+
+        logger.info("Interval re-resolved id=%s from %s to %s", row.id, row.status, new_status)
+        return ReResolveResult(
+            interval_id=row.id,
+            old_resolution=row.status,
+            new_resolution=new_status,
+            worked_sec=row.worked_sec,
+        )
 
     def get_active_interval(self) -> IntervalRow | None:
         """Return the latest active interval, or None if no interval is active."""
