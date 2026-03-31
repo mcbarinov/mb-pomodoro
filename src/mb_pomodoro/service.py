@@ -1,12 +1,13 @@
-"""High-level API for pomodoro timer operations."""
+"""Core business logic."""
 
 import logging
 import time
 
-from mm_clikit import CliError, is_process_running
+from mm_clikit import AppContext, is_process_running
 
 from mb_pomodoro.config import Config
 from mb_pomodoro.db import ACTIVE_STATUSES, Db, IntervalRow, IntervalStatus
+from mb_pomodoro.errors import AppError
 from mb_pomodoro.output import (
     CancelResult,
     DailyHistoryItem,
@@ -15,6 +16,7 @@ from mb_pomodoro.output import (
     FinishResult,
     HistoryItem,
     HistoryResult,
+    Output,
     PauseResult,
     ReResolveResult,
     ResumeResult,
@@ -26,40 +28,19 @@ from mb_pomodoro.time_utils import parse_duration
 
 logger = logging.getLogger(__name__)
 
+Context = AppContext["Service", Output, Config]
+
 # Grace period for worker startup: covers Python interpreter launch, imports,
 # config loading, and first heartbeat write. Skips recovery for fresh intervals
 # where the worker may not have written its PID file yet.
 _STARTUP_GRACE_SEC = 15
 
 
-class PomodoroError(CliError):
-    """Application-level error with machine-readable code.
-
-    Caught automatically by TyperPlus error handler — formats JSON/display and exits.
-    """
-
-    def __init__(self, code: str, message: str) -> None:
-        """Initialize with error code and human-readable message.
-
-        Args:
-            code: Machine-readable error code (e.g. 'NOT_RUNNING').
-            message: Human-readable error description.
-
-        """
-        super().__init__(message, error_code=code)
-
-
-class Pomodoro:
-    """High-level API for pomodoro timer operations, wrapping DB and time logic."""
+class Service:
+    """Main application service."""
 
     def __init__(self, db: Db, cfg: Config) -> None:
-        """Initialize the pomodoro service.
-
-        Args:
-            db: Database access object.
-            cfg: Application configuration.
-
-        """
+        """Initialize with database and configuration."""
         self._db = db
         self._cfg = cfg
 
@@ -73,18 +54,18 @@ class Pomodoro:
             Start result with interval ID, duration, and start time.
 
         Raises:
-            PomodoroError: On invalid duration, active interval exists, or concurrent race.
+            AppError: On invalid duration, active interval exists, or concurrent race.
 
         """
         if duration is None:
             duration = self._cfg.default_duration
         duration_sec = parse_duration(duration)
         if duration_sec is None or duration_sec <= 0:
-            raise PomodoroError("INVALID_DURATION", f"Invalid duration: {duration}. Examples: 25, 25m, 90s, 10m30s.")
+            raise AppError("INVALID_DURATION", f"Invalid duration: {duration}. Examples: 25, 25m, 90s, 10m30s.")
 
         latest = self._db.fetch_latest_interval()
         if latest and latest.status in ACTIVE_STATUSES:
-            raise PomodoroError(
+            raise AppError(
                 "ACTIVE_INTERVAL_EXISTS",
                 f"An active interval already exists. Latest interval: id={latest.id}, status={latest.status}.",
             )
@@ -92,7 +73,7 @@ class Pomodoro:
         now = int(time.time())
         interval_id = self._db.insert_interval(duration_sec, now)
         if interval_id is None:
-            raise PomodoroError("ACTIVE_INTERVAL_EXISTS", "Another interval was started concurrently.")
+            raise AppError("ACTIVE_INTERVAL_EXISTS", "Another interval was started concurrently.")
 
         logger.info("Interval started id=%d duration=%ds", interval_id, duration_sec)
         return StartResult(interval_id=interval_id, duration_sec=duration_sec, started_at=now)
@@ -104,7 +85,7 @@ class Pomodoro:
             Pause result with worked and remaining time.
 
         Raises:
-            PomodoroError: If no running interval or concurrent modification.
+            AppError: If no running interval or concurrent modification.
 
         """
         row = self._db.fetch_latest_interval()
@@ -112,14 +93,14 @@ class Pomodoro:
             msg = "No running interval to pause."
             if row is not None:
                 msg = f"{msg} Latest interval: id={row.id}, status={row.status}."
-            raise PomodoroError("NOT_RUNNING", msg)
+            raise AppError("NOT_RUNNING", msg)
 
         now = int(time.time())
         new_worked = row.effective_worked(now)
 
         if not self._db.pause_interval(row.id, new_worked, now):
             logger.warning("Pause rejected: concurrent modification id=%s", row.id)
-            raise PomodoroError("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
+            raise AppError("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
 
         remaining = row.duration_sec - new_worked
         logger.info("Interval paused id=%s worked=%ds remaining=%ds", row.id, new_worked, remaining)
@@ -132,7 +113,7 @@ class Pomodoro:
             Resume result with worked and remaining time.
 
         Raises:
-            PomodoroError: If no resumable interval or concurrent modification.
+            AppError: If no resumable interval or concurrent modification.
 
         """
         row = self._db.fetch_latest_interval()
@@ -140,12 +121,12 @@ class Pomodoro:
             msg = "No paused or interrupted interval to resume."
             if row is not None:
                 msg = f"{msg} Latest interval: id={row.id}, status={row.status}."
-            raise PomodoroError("NOT_RESUMABLE", msg)
+            raise AppError("NOT_RESUMABLE", msg)
 
         now = int(time.time())
         if not self._db.resume_interval(row.id, now):
             logger.warning("Resume rejected: concurrent modification id=%s", row.id)
-            raise PomodoroError("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
+            raise AppError("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
 
         remaining = row.duration_sec - row.worked_sec
         logger.info("Interval resumed id=%s worked=%ds remaining=%ds", row.id, row.worked_sec, remaining)
@@ -158,7 +139,7 @@ class Pomodoro:
             Cancel result with worked time.
 
         Raises:
-            PomodoroError: If no active interval or concurrent modification.
+            AppError: If no active interval or concurrent modification.
 
         """
         row = self._db.fetch_latest_interval()
@@ -166,14 +147,14 @@ class Pomodoro:
             msg = "No active interval to cancel."
             if row is not None:
                 msg = f"{msg} Latest interval: id={row.id}, status={row.status}."
-            raise PomodoroError("NO_ACTIVE_INTERVAL", msg)
+            raise AppError("NO_ACTIVE_INTERVAL", msg)
 
         now = int(time.time())
         new_worked = row.effective_worked(now)
 
         if not self._db.cancel_interval(row.id, new_worked, now):
             logger.warning("Cancel rejected: concurrent modification id=%s", row.id)
-            raise PomodoroError("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
+            raise AppError("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
 
         logger.info("Interval cancelled id=%s worked=%ds", row.id, new_worked)
         return CancelResult(interval_id=row.id, worked_sec=new_worked)
@@ -188,11 +169,11 @@ class Pomodoro:
             Finish result with resolution and worked time.
 
         Raises:
-            PomodoroError: On invalid resolution, no finished interval, or concurrent modification.
+            AppError: On invalid resolution, no finished interval, or concurrent modification.
 
         """
         if resolution not in (IntervalStatus.COMPLETED, IntervalStatus.ABANDONED):
-            raise PomodoroError("INVALID_RESOLUTION", "Resolution must be 'completed' or 'abandoned'.")
+            raise AppError("INVALID_RESOLUTION", "Resolution must be 'completed' or 'abandoned'.")
 
         resolved_status = IntervalStatus(resolution)
 
@@ -201,12 +182,12 @@ class Pomodoro:
             msg = "No finished interval to resolve."
             if row is not None:
                 msg = f"{msg} Latest interval: id={row.id}, status={row.status}."
-            raise PomodoroError("NOT_FINISHED", msg)
+            raise AppError("NOT_FINISHED", msg)
 
         now = int(time.time())
         if not self._db.resolve_interval(row.id, resolved_status, now):
             logger.warning("Finish rejected: concurrent modification id=%s", row.id)
-            raise PomodoroError("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
+            raise AppError("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
 
         logger.info("Interval resolved id=%s resolution=%s", row.id, resolved_status)
         return FinishResult(interval_id=row.id, resolution=resolved_status, worked_sec=row.worked_sec)
@@ -221,17 +202,17 @@ class Pomodoro:
             Delete result with deleted interval metadata.
 
         Raises:
-            PomodoroError: If interval not found.
+            AppError: If interval not found.
 
         """
         if interval_id is not None:
             row = self._db.fetch_interval(interval_id)
             if row is None:
-                raise PomodoroError("INTERVAL_NOT_FOUND", f"No interval with id {interval_id}.")
+                raise AppError("INTERVAL_NOT_FOUND", f"No interval with id {interval_id}.")
         else:
             row = self._db.fetch_latest_interval()
             if row is None:
-                raise PomodoroError("INTERVAL_NOT_FOUND", "No intervals found.")
+                raise AppError("INTERVAL_NOT_FOUND", "No intervals found.")
 
         now = int(time.time())
         worked = row.effective_worked(now)
@@ -259,28 +240,28 @@ class Pomodoro:
             Re-resolve result with old and new resolution.
 
         Raises:
-            PomodoroError: On invalid resolution, wrong status, same status, or concurrent modification.
+            AppError: On invalid resolution, wrong status, same status, or concurrent modification.
 
         """
         if resolution not in (IntervalStatus.COMPLETED, IntervalStatus.ABANDONED):
-            raise PomodoroError("INVALID_RESOLUTION", "Resolution must be 'completed' or 'abandoned'.")
+            raise AppError("INVALID_RESOLUTION", "Resolution must be 'completed' or 'abandoned'.")
         new_status = IntervalStatus(resolution)
 
         row = self._db.fetch_interval(interval_id)
         if row is None:
-            raise PomodoroError("INTERVAL_NOT_FOUND", f"No interval with id {interval_id}.")
+            raise AppError("INTERVAL_NOT_FOUND", f"No interval with id {interval_id}.")
         if row.status not in (IntervalStatus.COMPLETED, IntervalStatus.ABANDONED):
-            raise PomodoroError(
+            raise AppError(
                 "NOT_RE_RESOLVABLE",
                 f"Interval {interval_id} has status '{row.status}'; only completed or abandoned intervals can be re-resolved.",
             )
         if row.status == new_status:
-            raise PomodoroError("ALREADY_RESOLVED", f"Interval {interval_id} is already {resolution}.")
+            raise AppError("ALREADY_RESOLVED", f"Interval {interval_id} is already {resolution}.")
 
         now = int(time.time())
         if not self._db.re_resolve_interval(row.id, new_status, now):
             logger.warning("Re-resolve rejected: concurrent modification id=%s", row.id)
-            raise PomodoroError("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
+            raise AppError("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
 
         logger.info("Interval re-resolved id=%s from %s to %s", row.id, row.status, new_status)
         return ReResolveResult(

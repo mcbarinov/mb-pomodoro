@@ -6,14 +6,14 @@ import time
 from typing import Annotated
 
 import typer
-from mm_clikit import is_process_running, read_pid_file, spawn_daemon, stop_process, write_pid_file
+from mm_clikit import is_process_running, read_pid_file, spawn_daemon, stop_process, use_context, write_pid_file
 from mm_pymac import MenuItem, MenuSeparator, TrayApp
 
-from mb_pomodoro.app_context import use_context
 from mb_pomodoro.config import Config
 from mb_pomodoro.db import ACTIVE_STATUSES, Db, IntervalRow, IntervalStatus
+from mb_pomodoro.errors import AppError
 from mb_pomodoro.output import TrayStartResult, TrayStopResult
-from mb_pomodoro.pomodoro import Pomodoro, PomodoroError
+from mb_pomodoro.service import Context, Service
 from mb_pomodoro.time_utils import format_mmss, parse_duration
 
 _POLL_INTERVAL_SEC = 2.0
@@ -50,8 +50,8 @@ def _format_title(row: IntervalRow | None, today_completed: int) -> str:
 class _TrayController:
     """Manages tray app lifecycle: menu items, polling, and CLI actions."""
 
-    def __init__(self, pomodoro: Pomodoro, cfg: Config) -> None:
-        self._pomodoro = pomodoro
+    def __init__(self, svc: Service, cfg: Config) -> None:
+        self._svc = svc
         self._cfg = cfg
         self._app = TrayApp(title="\u25c7")
 
@@ -92,9 +92,9 @@ class _TrayController:
 
     def _refresh(self) -> None:
         """Poll DB and update menu bar title and menu items."""
-        row = self._pomodoro.fetch_latest_interval()
+        row = self._svc.fetch_latest_interval()
         now = int(time.time())
-        today_completed = self._pomodoro.count_today_completed(now)
+        today_completed = self._svc.count_today_completed(now)
 
         self._app.title = _format_title(row, today_completed)
 
@@ -151,13 +151,13 @@ class _TrayController:
 
 def _stop_tray(ctx: typer.Context) -> None:
     """Stop a running tray process via SIGTERM with SIGKILL fallback."""
-    app = use_context(ctx)
+    app = use_context(ctx, Context)
     pid_path = app.cfg.tray_pid_path
 
     pid = read_pid_file(pid_path)
     if pid is None or not is_process_running(pid_path, command_contains="mb-pomodoro"):
         pid_path.unlink(missing_ok=True)
-        raise PomodoroError("TRAY_NOT_RUNNING", "Tray is not running.")
+        raise AppError("TRAY_NOT_RUNNING", "Tray is not running.")
 
     stop_process(pid, timeout=_STOP_TIMEOUT_SEC)
     pid_path.unlink(missing_ok=True)
@@ -166,19 +166,19 @@ def _stop_tray(ctx: typer.Context) -> None:
 
 def _run_foreground(ctx: typer.Context) -> None:
     """Run the tray in foreground (blocking). Used by the background spawner."""
-    app = use_context(ctx)
+    app = use_context(ctx, Context)
     cfg = app.cfg
     tray_pid_path = cfg.tray_pid_path
 
     if is_process_running(tray_pid_path, command_contains="mb-pomodoro"):
-        raise PomodoroError("TRAY_ALREADY_RUNNING", "Tray is already running.")
+        raise AppError("TRAY_ALREADY_RUNNING", "Tray is already running.")
 
     # Separate DB connection — the tray outlives the CLI context lifecycle
     tray_db = Db(cfg.db_path)
-    tray_pomodoro = Pomodoro(tray_db, cfg)
+    tray_svc = Service(tray_db, cfg)
     write_pid_file(tray_pid_path)
     try:
-        _TrayController(tray_pomodoro, cfg).run()
+        _TrayController(tray_svc, cfg).run()
     finally:
         tray_pid_path.unlink(missing_ok=True)
         tray_db.close()
@@ -186,19 +186,19 @@ def _run_foreground(ctx: typer.Context) -> None:
 
 def _launch_background(ctx: typer.Context) -> None:
     """Spawn tray in background, verify it started, print PID."""
-    app = use_context(ctx)
+    app = use_context(ctx, Context)
     cfg = app.cfg
 
     if is_process_running(cfg.tray_pid_path, command_contains="mb-pomodoro"):
         pid = read_pid_file(cfg.tray_pid_path)
-        raise PomodoroError("TRAY_ALREADY_RUNNING", f"Tray is already running (pid {pid}).")
+        raise AppError("TRAY_ALREADY_RUNNING", f"Tray is already running (pid {pid}).")
 
     pid = spawn_daemon([*cfg.cli_base_args(), "tray", "--run"])
 
     # Brief wait to verify the process is alive
     time.sleep(_LAUNCH_VERIFY_SEC)
     if not is_process_running(cfg.tray_pid_path, command_contains="mb-pomodoro"):
-        raise PomodoroError("TRAY_LAUNCH_FAILED", "Tray process failed to start.")
+        raise AppError("TRAY_LAUNCH_FAILED", "Tray process failed to start.")
 
     app.out.print_tray_started(TrayStartResult(pid=pid))
 

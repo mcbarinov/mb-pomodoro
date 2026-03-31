@@ -3,8 +3,9 @@
 from typing import Annotated
 
 import typer
+from mm_clikit import use_context
 
-from mb_pomodoro.app_context import use_context
+from mb_pomodoro.service import Context
 
 
 def status(
@@ -13,6 +14,6 @@ def status(
     short: Annotated[bool, typer.Option("--short", help="Single-line output.")] = False,
 ) -> None:
     """Show current Pomodoro timer status."""
-    app = use_context(ctx)
-    result = app.pomodoro.status()
+    app = use_context(ctx, Context)
+    result = app.svc.status()
     app.out.print_status(result, short=short)

@@ -1,14 +1,11 @@
 """CLI entry point for mb-pomodoro."""
 
-import os
-from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated
 
 import typer
-from mm_clikit import TyperPlus, get_json_mode
+from mm_clikit import AppContext, TyperPlus, get_json_mode, setup_logging
 
-from mb_pomodoro.app_context import AppContext
 from mb_pomodoro.commands.cancel import cancel
 from mb_pomodoro.commands.delete import delete
 from mb_pomodoro.commands.finish import finish
@@ -22,9 +19,8 @@ from mb_pomodoro.commands.tray import tray
 from mb_pomodoro.commands.worker import worker
 from mb_pomodoro.config import Config
 from mb_pomodoro.db import Db
-from mb_pomodoro.log import setup_logging
 from mb_pomodoro.output import Output
-from mb_pomodoro.pomodoro import Pomodoro
+from mb_pomodoro.service import Service
 
 app = TyperPlus(package_name="mb-pomodoro")
 
@@ -35,26 +31,19 @@ def main(
     *,
     data_dir: Annotated[
         Path | None,
-        typer.Option("--data-dir", help="Application data directory (db, pid, log). Allows running multiple instances."),
+        typer.Option("--data-dir", help="Data directory. Env: MB_POMODORO_DATA_DIR."),
     ] = None,
 ) -> None:
     """Pomodoro timer for macOS."""
-    _ = version
-    if data_dir is not None:
-        resolved_dir: Path | None = data_dir.resolve()
-    elif env_dir := os.environ.get("MB_POMODORO_DATA_DIR"):
-        resolved_dir = Path(env_dir).resolve()
-    else:
-        resolved_dir = None
-    cfg = Config.build(resolved_dir)
+    cfg = Config.build(data_dir)
     cfg.data_dir.mkdir(parents=True, exist_ok=True)
-    setup_logging(cfg.log_path)
+    setup_logging("mb_pomodoro", cfg.log_path)
     db = Db(cfg.db_path)
     ctx.call_on_close(db.close)
-    pomodoro = Pomodoro(db, cfg)
+    svc = Service(db, cfg)
     if ctx.invoked_subcommand not in {"worker", "tray"}:
-        pomodoro.recover_stale()
-    ctx.obj = AppContext(out=Output(json_mode=get_json_mode()), pomodoro=pomodoro, cfg=cfg)
+        svc.recover_stale()
+    ctx.obj = AppContext(svc=svc, out=Output(json_mode=get_json_mode()), cfg=cfg)
 
 
 app.command()(start)

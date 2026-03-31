@@ -1,5 +1,6 @@
 """Centralized application configuration."""
 
+import os
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -58,8 +59,13 @@ class Config(BaseModel):
 
     @staticmethod
     def build(data_dir: Path | None = None) -> Config:
-        """Build a Config instance from defaults and optional config.toml."""
-        resolved_dir = data_dir if data_dir is not None else DEFAULT_DATA_DIR
+        """Build a Config from CLI arg / env var / default, with optional TOML overlay."""
+        if data_dir is not None:
+            resolved_dir = data_dir.resolve()
+        elif env := os.environ.get("MB_POMODORO_DATA_DIR"):
+            resolved_dir = Path(env).resolve()
+        else:
+            resolved_dir = DEFAULT_DATA_DIR
         config_path = resolved_dir / "config.toml"
 
         kwargs: dict[str, Any] = {"data_dir": resolved_dir}

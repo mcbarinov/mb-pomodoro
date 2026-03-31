@@ -3,9 +3,10 @@
 from typing import Annotated
 
 import typer
+from mm_clikit import use_context
 
-from mb_pomodoro.app_context import use_context
-from mb_pomodoro.pomodoro import PomodoroError
+from mb_pomodoro.errors import AppError
+from mb_pomodoro.service import Context
 from mb_pomodoro.time_utils import format_datetime, format_mmss
 
 _RESOLUTION_HELP = "New resolution: 'completed' (honest work) or 'abandoned' (did not work)."
@@ -19,15 +20,15 @@ def re_resolve(
     yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation prompt.")] = False,
 ) -> None:
     """Change the resolution of a completed or abandoned interval."""
-    app = use_context(ctx)
+    app = use_context(ctx, Context)
 
     if not yes:
-        row = app.pomodoro.fetch_interval(interval_id)
+        row = app.svc.fetch_interval(interval_id)
         if row is None:
-            raise PomodoroError("INTERVAL_NOT_FOUND", f"No interval with id {interval_id}.")
+            raise AppError("INTERVAL_NOT_FOUND", f"No interval with id {interval_id}.")
 
         if app.out.json_mode:
-            raise PomodoroError("CONFIRMATION_REQUIRED", "Use --yes flag to confirm in JSON mode.")
+            raise AppError("CONFIRMATION_REQUIRED", "Use --yes flag to confirm in JSON mode.")
 
         typer.echo(
             f"Interval {row.id}: currently {row.status}, "
@@ -36,7 +37,7 @@ def re_resolve(
         typer.echo(f"Will change to: {resolution}.")
         answer = input("Type 'yes' to confirm: ")
         if answer != "yes":
-            raise PomodoroError("NOT_CONFIRMED", "Aborted: interval was not changed.")
+            raise AppError("NOT_CONFIRMED", "Aborted: interval was not changed.")
 
-    result = app.pomodoro.re_resolve(interval_id, resolution)
+    result = app.svc.re_resolve(interval_id, resolution)
     app.out.print_re_resolved(result)
