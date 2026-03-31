@@ -3,11 +3,10 @@
 import logging
 import time
 
-from mm_clikit import is_process_running
+from mm_clikit import CliError, is_process_running
 
 from mb_pomodoro.config import Config
 from mb_pomodoro.db import ACTIVE_STATUSES, Db, IntervalRow, IntervalStatus
-from mb_pomodoro.errors import AppError
 from mb_pomodoro.results import (
     CancelResult,
     DailyHistoryItem,
@@ -51,26 +50,26 @@ class Service:
             Start result with interval ID, duration, and start time.
 
         Raises:
-            AppError: On invalid duration, active interval exists, or concurrent race.
+            CliError: On invalid duration, active interval exists, or concurrent race.
 
         """
         if duration is None:
             duration = self._cfg.default_duration
         duration_sec = parse_duration(duration)
         if duration_sec is None or duration_sec <= 0:
-            raise AppError("INVALID_DURATION", f"Invalid duration: {duration}. Examples: 25, 25m, 90s, 10m30s.")
+            raise CliError(f"Invalid duration: {duration}. Examples: 25, 25m, 90s, 10m30s.", "INVALID_DURATION")
 
         latest = self._db.fetch_latest_interval()
         if latest and latest.status in ACTIVE_STATUSES:
-            raise AppError(
-                "ACTIVE_INTERVAL_EXISTS",
+            raise CliError(
                 f"An active interval already exists. Latest interval: id={latest.id}, status={latest.status}.",
+                "ACTIVE_INTERVAL_EXISTS",
             )
 
         now = int(time.time())
         interval_id = self._db.insert_interval(duration_sec, now)
         if interval_id is None:
-            raise AppError("ACTIVE_INTERVAL_EXISTS", "Another interval was started concurrently.")
+            raise CliError("Another interval was started concurrently.", "ACTIVE_INTERVAL_EXISTS")
 
         logger.info("Interval started id=%d duration=%ds", interval_id, duration_sec)
         return StartResult(interval_id=interval_id, duration_sec=duration_sec, started_at=now)
@@ -82,7 +81,7 @@ class Service:
             Pause result with worked and remaining time.
 
         Raises:
-            AppError: If no running interval or concurrent modification.
+            CliError: If no running interval or concurrent modification.
 
         """
         row = self._db.fetch_latest_interval()
@@ -90,14 +89,14 @@ class Service:
             msg = "No running interval to pause."
             if row is not None:
                 msg = f"{msg} Latest interval: id={row.id}, status={row.status}."
-            raise AppError("NOT_RUNNING", msg)
+            raise CliError(msg, "NOT_RUNNING")
 
         now = int(time.time())
         new_worked = row.effective_worked(now)
 
         if not self._db.pause_interval(row.id, new_worked, now):
             logger.warning("Pause rejected: concurrent modification id=%s", row.id)
-            raise AppError("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
+            raise CliError("Interval was modified concurrently.", "CONCURRENT_MODIFICATION")
 
         remaining = row.duration_sec - new_worked
         logger.info("Interval paused id=%s worked=%ds remaining=%ds", row.id, new_worked, remaining)
@@ -110,7 +109,7 @@ class Service:
             Resume result with worked and remaining time.
 
         Raises:
-            AppError: If no resumable interval or concurrent modification.
+            CliError: If no resumable interval or concurrent modification.
 
         """
         row = self._db.fetch_latest_interval()
@@ -118,12 +117,12 @@ class Service:
             msg = "No paused or interrupted interval to resume."
             if row is not None:
                 msg = f"{msg} Latest interval: id={row.id}, status={row.status}."
-            raise AppError("NOT_RESUMABLE", msg)
+            raise CliError(msg, "NOT_RESUMABLE")
 
         now = int(time.time())
         if not self._db.resume_interval(row.id, now):
             logger.warning("Resume rejected: concurrent modification id=%s", row.id)
-            raise AppError("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
+            raise CliError("Interval was modified concurrently.", "CONCURRENT_MODIFICATION")
 
         remaining = row.duration_sec - row.worked_sec
         logger.info("Interval resumed id=%s worked=%ds remaining=%ds", row.id, row.worked_sec, remaining)
@@ -136,7 +135,7 @@ class Service:
             Cancel result with worked time.
 
         Raises:
-            AppError: If no active interval or concurrent modification.
+            CliError: If no active interval or concurrent modification.
 
         """
         row = self._db.fetch_latest_interval()
@@ -144,14 +143,14 @@ class Service:
             msg = "No active interval to cancel."
             if row is not None:
                 msg = f"{msg} Latest interval: id={row.id}, status={row.status}."
-            raise AppError("NO_ACTIVE_INTERVAL", msg)
+            raise CliError(msg, "NO_ACTIVE_INTERVAL")
 
         now = int(time.time())
         new_worked = row.effective_worked(now)
 
         if not self._db.cancel_interval(row.id, new_worked, now):
             logger.warning("Cancel rejected: concurrent modification id=%s", row.id)
-            raise AppError("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
+            raise CliError("Interval was modified concurrently.", "CONCURRENT_MODIFICATION")
 
         logger.info("Interval cancelled id=%s worked=%ds", row.id, new_worked)
         return CancelResult(interval_id=row.id, worked_sec=new_worked)
@@ -166,11 +165,11 @@ class Service:
             Finish result with resolution and worked time.
 
         Raises:
-            AppError: On invalid resolution, no finished interval, or concurrent modification.
+            CliError: On invalid resolution, no finished interval, or concurrent modification.
 
         """
         if resolution not in (IntervalStatus.COMPLETED, IntervalStatus.ABANDONED):
-            raise AppError("INVALID_RESOLUTION", "Resolution must be 'completed' or 'abandoned'.")
+            raise CliError("Resolution must be 'completed' or 'abandoned'.", "INVALID_RESOLUTION")
 
         resolved_status = IntervalStatus(resolution)
 
@@ -179,12 +178,12 @@ class Service:
             msg = "No finished interval to resolve."
             if row is not None:
                 msg = f"{msg} Latest interval: id={row.id}, status={row.status}."
-            raise AppError("NOT_FINISHED", msg)
+            raise CliError(msg, "NOT_FINISHED")
 
         now = int(time.time())
         if not self._db.resolve_interval(row.id, resolved_status, now):
             logger.warning("Finish rejected: concurrent modification id=%s", row.id)
-            raise AppError("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
+            raise CliError("Interval was modified concurrently.", "CONCURRENT_MODIFICATION")
 
         logger.info("Interval resolved id=%s resolution=%s", row.id, resolved_status)
         return FinishResult(interval_id=row.id, resolution=resolved_status, worked_sec=row.worked_sec)
@@ -199,17 +198,17 @@ class Service:
             Delete result with deleted interval metadata.
 
         Raises:
-            AppError: If interval not found.
+            CliError: If interval not found.
 
         """
         if interval_id is not None:
             row = self._db.fetch_interval(interval_id)
             if row is None:
-                raise AppError("INTERVAL_NOT_FOUND", f"No interval with id {interval_id}.")
+                raise CliError(f"No interval with id {interval_id}.", "INTERVAL_NOT_FOUND")
         else:
             row = self._db.fetch_latest_interval()
             if row is None:
-                raise AppError("INTERVAL_NOT_FOUND", "No intervals found.")
+                raise CliError("No intervals found.", "INTERVAL_NOT_FOUND")
 
         now = int(time.time())
         worked = row.effective_worked(now)
@@ -237,28 +236,28 @@ class Service:
             Re-resolve result with old and new resolution.
 
         Raises:
-            AppError: On invalid resolution, wrong status, same status, or concurrent modification.
+            CliError: On invalid resolution, wrong status, same status, or concurrent modification.
 
         """
         if resolution not in (IntervalStatus.COMPLETED, IntervalStatus.ABANDONED):
-            raise AppError("INVALID_RESOLUTION", "Resolution must be 'completed' or 'abandoned'.")
+            raise CliError("Resolution must be 'completed' or 'abandoned'.", "INVALID_RESOLUTION")
         new_status = IntervalStatus(resolution)
 
         row = self._db.fetch_interval(interval_id)
         if row is None:
-            raise AppError("INTERVAL_NOT_FOUND", f"No interval with id {interval_id}.")
+            raise CliError(f"No interval with id {interval_id}.", "INTERVAL_NOT_FOUND")
         if row.status not in (IntervalStatus.COMPLETED, IntervalStatus.ABANDONED):
-            raise AppError(
-                "NOT_RE_RESOLVABLE",
+            raise CliError(
                 f"Interval {interval_id} has status '{row.status}'; only completed or abandoned intervals can be re-resolved.",
+                "NOT_RE_RESOLVABLE",
             )
         if row.status == new_status:
-            raise AppError("ALREADY_RESOLVED", f"Interval {interval_id} is already {resolution}.")
+            raise CliError(f"Interval {interval_id} is already {resolution}.", "ALREADY_RESOLVED")
 
         now = int(time.time())
         if not self._db.re_resolve_interval(row.id, new_status, now):
             logger.warning("Re-resolve rejected: concurrent modification id=%s", row.id)
-            raise AppError("CONCURRENT_MODIFICATION", "Interval was modified concurrently.")
+            raise CliError("Interval was modified concurrently.", "CONCURRENT_MODIFICATION")
 
         logger.info("Interval re-resolved id=%s from %s to %s", row.id, row.status, new_status)
         return ReResolveResult(

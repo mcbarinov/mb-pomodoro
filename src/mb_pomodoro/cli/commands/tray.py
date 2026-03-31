@@ -6,13 +6,12 @@ import time
 from typing import Annotated
 
 import typer
-from mm_clikit import is_process_running, read_pid_file, spawn_daemon, stop_process, write_pid_file
+from mm_clikit import CliError, is_process_running, read_pid_file, spawn_daemon, stop_process, write_pid_file
 from mm_pymac import MenuItem, MenuSeparator, TrayApp
 
 from mb_pomodoro.cli.context import use_context
 from mb_pomodoro.config import Config
 from mb_pomodoro.db import ACTIVE_STATUSES, Db, IntervalRow, IntervalStatus
-from mb_pomodoro.errors import AppError
 from mb_pomodoro.results import TrayStartResult, TrayStopResult
 from mb_pomodoro.service import Service
 from mb_pomodoro.time_utils import format_mmss, parse_duration
@@ -158,7 +157,7 @@ def _stop_tray(ctx: typer.Context) -> None:
     pid = read_pid_file(pid_path)
     if pid is None or not is_process_running(pid_path, command_contains="mb-pomodoro"):
         pid_path.unlink(missing_ok=True)
-        raise AppError("TRAY_NOT_RUNNING", "Tray is not running.")
+        raise CliError("Tray is not running.", "TRAY_NOT_RUNNING")
 
     stop_process(pid, timeout=_STOP_TIMEOUT_SEC)
     pid_path.unlink(missing_ok=True)
@@ -172,7 +171,7 @@ def _run_foreground(ctx: typer.Context) -> None:
     tray_pid_path = cfg.tray_pid_path
 
     if is_process_running(tray_pid_path, command_contains="mb-pomodoro"):
-        raise AppError("TRAY_ALREADY_RUNNING", "Tray is already running.")
+        raise CliError("Tray is already running.", "TRAY_ALREADY_RUNNING")
 
     # Separate DB connection — the tray outlives the CLI context lifecycle
     tray_db = Db(cfg.db_path)
@@ -192,14 +191,14 @@ def _launch_background(ctx: typer.Context) -> None:
 
     if is_process_running(cfg.tray_pid_path, command_contains="mb-pomodoro"):
         pid = read_pid_file(cfg.tray_pid_path)
-        raise AppError("TRAY_ALREADY_RUNNING", f"Tray is already running (pid {pid}).")
+        raise CliError(f"Tray is already running (pid {pid}).", "TRAY_ALREADY_RUNNING")
 
     pid = spawn_daemon([*cfg.cli_base_args(), "tray", "--run"])
 
     # Brief wait to verify the process is alive
     time.sleep(_LAUNCH_VERIFY_SEC)
     if not is_process_running(cfg.tray_pid_path, command_contains="mb-pomodoro"):
-        raise AppError("TRAY_LAUNCH_FAILED", "Tray process failed to start.")
+        raise CliError("Tray process failed to start.", "TRAY_LAUNCH_FAILED")
 
     app.out.print_tray_started(TrayStartResult(pid=pid))
 

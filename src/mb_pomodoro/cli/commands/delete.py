@@ -4,9 +4,9 @@ import time
 from typing import Annotated
 
 import typer
+from mm_clikit import CliError
 
 from mb_pomodoro.cli.context import use_context
-from mb_pomodoro.errors import AppError
 from mb_pomodoro.time_utils import format_datetime, format_mmss
 
 
@@ -24,14 +24,14 @@ def delete(
         if interval_id is not None:
             row = app.svc.fetch_interval(interval_id)
             if row is None:
-                raise AppError("INTERVAL_NOT_FOUND", f"No interval with id {interval_id}.")
+                raise CliError(f"No interval with id {interval_id}.", "INTERVAL_NOT_FOUND")
         else:
             row = app.svc.fetch_latest_interval()
             if row is None:
-                raise AppError("INTERVAL_NOT_FOUND", "No intervals found.")
+                raise CliError("No intervals found.", "INTERVAL_NOT_FOUND")
 
         if app.out.json_mode:
-            raise AppError("CONFIRMATION_REQUIRED", "Use --yes flag to confirm deletion in JSON mode.")
+            raise CliError("Use --yes flag to confirm deletion in JSON mode.", "CONFIRMATION_REQUIRED")
 
         now = int(time.time())
         worked = row.effective_worked(now)
@@ -41,7 +41,7 @@ def delete(
         )
         answer = input("Type 'yes' to permanently delete this interval: ")
         if answer != "yes":
-            raise AppError("NOT_CONFIRMED", "Aborted: interval was not deleted.")
+            raise CliError("Aborted: interval was not deleted.", "NOT_CONFIRMED")
 
     result = app.svc.delete_interval(interval_id)
     app.out.print_deleted(result)
