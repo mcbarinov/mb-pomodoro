@@ -3,12 +3,12 @@
 import logging
 import time
 
-from mm_clikit import AppContext, is_process_running
+from mm_clikit import is_process_running
 
 from mb_pomodoro.config import Config
 from mb_pomodoro.db import ACTIVE_STATUSES, Db, IntervalRow, IntervalStatus
 from mb_pomodoro.errors import AppError
-from mb_pomodoro.output import (
+from mb_pomodoro.results import (
     CancelResult,
     DailyHistoryItem,
     DailyHistoryResult,
@@ -16,7 +16,6 @@ from mb_pomodoro.output import (
     FinishResult,
     HistoryItem,
     HistoryResult,
-    Output,
     PauseResult,
     ReResolveResult,
     ResumeResult,
@@ -27,8 +26,6 @@ from mb_pomodoro.output import (
 from mb_pomodoro.time_utils import parse_duration
 
 logger = logging.getLogger(__name__)
-
-Context = AppContext["Service", Output, Config]
 
 # Grace period for worker startup: covers Python interpreter launch, imports,
 # config loading, and first heartbeat write. Skips recovery for fresh intervals

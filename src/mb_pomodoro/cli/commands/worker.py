@@ -6,11 +6,11 @@ import time
 from typing import Annotated
 
 import typer
-from mm_clikit import use_context, write_pid_file
+from mm_clikit import write_pid_file
 
+from mb_pomodoro.cli.context import use_context
 from mb_pomodoro.db import IntervalStatus
 from mb_pomodoro.notification import send_notification
-from mb_pomodoro.service import Context
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ def worker(
     interval_id: Annotated[int, typer.Argument(help="Interval ID to track.")],
 ) -> None:
     """Run background timer worker. Not intended for manual use."""
-    app = use_context(ctx, Context)
+    app = use_context(ctx)
     cfg = app.cfg
     svc = app.svc
 

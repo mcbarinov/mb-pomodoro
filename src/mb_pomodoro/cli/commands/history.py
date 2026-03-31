@@ -3,9 +3,8 @@
 from typing import Annotated
 
 import typer
-from mm_clikit import use_context
 
-from mb_pomodoro.service import Context
+from mb_pomodoro.cli.context import use_context
 
 
 def history(
@@ -14,7 +13,7 @@ def history(
     daily: Annotated[bool, typer.Option("--daily", "-d", help="Show completed count per day.")] = False,
 ) -> None:
     """Show Pomodoro session history."""
-    app = use_context(ctx, Context)
+    app = use_context(ctx)
 
     if daily:
         daily_result = app.svc.daily_history(limit)

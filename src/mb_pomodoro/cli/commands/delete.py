@@ -4,10 +4,9 @@ import time
 from typing import Annotated
 
 import typer
-from mm_clikit import use_context
 
+from mb_pomodoro.cli.context import use_context
 from mb_pomodoro.errors import AppError
-from mb_pomodoro.service import Context
 from mb_pomodoro.time_utils import format_datetime, format_mmss
 
 
@@ -18,7 +17,7 @@ def delete(
     yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation prompt.")] = False,
 ) -> None:
     """Permanently delete an interval from history."""
-    app = use_context(ctx, Context)
+    app = use_context(ctx)
 
     if not yes:
         # Pre-fetch for confirmation display

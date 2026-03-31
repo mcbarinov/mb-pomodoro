@@ -6,14 +6,15 @@ import time
 from typing import Annotated
 
 import typer
-from mm_clikit import is_process_running, read_pid_file, spawn_daemon, stop_process, use_context, write_pid_file
+from mm_clikit import is_process_running, read_pid_file, spawn_daemon, stop_process, write_pid_file
 from mm_pymac import MenuItem, MenuSeparator, TrayApp
 
+from mb_pomodoro.cli.context import use_context
 from mb_pomodoro.config import Config
 from mb_pomodoro.db import ACTIVE_STATUSES, Db, IntervalRow, IntervalStatus
 from mb_pomodoro.errors import AppError
-from mb_pomodoro.output import TrayStartResult, TrayStopResult
-from mb_pomodoro.service import Context, Service
+from mb_pomodoro.results import TrayStartResult, TrayStopResult
+from mb_pomodoro.service import Service
 from mb_pomodoro.time_utils import format_mmss, parse_duration
 
 _POLL_INTERVAL_SEC = 2.0
@@ -151,7 +152,7 @@ class _TrayController:
 
 def _stop_tray(ctx: typer.Context) -> None:
     """Stop a running tray process via SIGTERM with SIGKILL fallback."""
-    app = use_context(ctx, Context)
+    app = use_context(ctx)
     pid_path = app.cfg.tray_pid_path
 
     pid = read_pid_file(pid_path)
@@ -166,7 +167,7 @@ def _stop_tray(ctx: typer.Context) -> None:
 
 def _run_foreground(ctx: typer.Context) -> None:
     """Run the tray in foreground (blocking). Used by the background spawner."""
-    app = use_context(ctx, Context)
+    app = use_context(ctx)
     cfg = app.cfg
     tray_pid_path = cfg.tray_pid_path
 
@@ -186,7 +187,7 @@ def _run_foreground(ctx: typer.Context) -> None:
 
 def _launch_background(ctx: typer.Context) -> None:
     """Spawn tray in background, verify it started, print PID."""
-    app = use_context(ctx, Context)
+    app = use_context(ctx)
     cfg = app.cfg
 
     if is_process_running(cfg.tray_pid_path, command_contains="mb-pomodoro"):

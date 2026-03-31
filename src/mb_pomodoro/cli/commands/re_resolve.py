@@ -3,10 +3,9 @@
 from typing import Annotated
 
 import typer
-from mm_clikit import use_context
 
+from mb_pomodoro.cli.context import use_context
 from mb_pomodoro.errors import AppError
-from mb_pomodoro.service import Context
 from mb_pomodoro.time_utils import format_datetime, format_mmss
 
 _RESOLUTION_HELP = "New resolution: 'completed' (honest work) or 'abandoned' (did not work)."
@@ -20,7 +19,7 @@ def re_resolve(
     yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation prompt.")] = False,
 ) -> None:
     """Change the resolution of a completed or abandoned interval."""
-    app = use_context(ctx, Context)
+    app = use_context(ctx)
 
     if not yes:
         row = app.svc.fetch_interval(interval_id)
