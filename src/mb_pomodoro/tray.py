@@ -7,7 +7,6 @@ import time
 from mm_clikit import write_pid_file
 from mm_pymac import MenuItem, MenuSeparator, TrayApp
 
-from mb_pomodoro.config import Config
 from mb_pomodoro.core.core import Core
 from mb_pomodoro.core.db import ACTIVE_STATUSES, IntervalRow, IntervalStatus
 from mb_pomodoro.time_utils import format_mmss, parse_duration
@@ -144,12 +143,10 @@ class TrayController:
         threading.Thread(target=task, daemon=True).start()
 
 
-def run_foreground(cfg: Config) -> None:
-    """Run the tray in foreground (blocking). Creates its own Core (separate DB connection)."""
-    core = Core(cfg)
-    write_pid_file(cfg.tray_pid_path)
+def run_foreground(core: Core) -> None:
+    """Run the tray in foreground (blocking). Uses the Core provided by CLI."""
+    write_pid_file(core.config.tray_pid_path)
     try:
         TrayController(core).run()
     finally:
-        cfg.tray_pid_path.unlink(missing_ok=True)
-        core.close()
+        core.config.tray_pid_path.unlink(missing_ok=True)

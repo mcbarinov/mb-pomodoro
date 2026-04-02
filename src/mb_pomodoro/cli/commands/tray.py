@@ -35,7 +35,7 @@ def _run_tray_foreground(ctx: typer.Context) -> None:
     if is_process_running(app.core.config.tray_pid_path, command_contains="mb-pomodoro"):
         raise CliError("Tray is already running.", "TRAY_ALREADY_RUNNING")
 
-    run_foreground(app.core.config)
+    run_foreground(app.core)
 
 
 def _launch_background(ctx: typer.Context) -> None:
