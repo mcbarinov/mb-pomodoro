@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
-from mm_clikit import AppContext, TyperPlus, setup_logging
+from mm_clikit import CoreContext, TyperPlus, setup_logging
 
 from mb_pomodoro.cli.commands.cancel import cancel
 from mb_pomodoro.cli.commands.delete import delete
@@ -19,8 +19,7 @@ from mb_pomodoro.cli.commands.tray import tray
 from mb_pomodoro.cli.commands.worker import worker
 from mb_pomodoro.cli.output import Output
 from mb_pomodoro.config import Config
-from mb_pomodoro.db import Db
-from mb_pomodoro.service import Service
+from mb_pomodoro.core import Core
 
 app = TyperPlus(package_name="mb-pomodoro")
 
@@ -35,15 +34,13 @@ def main(
     ] = None,
 ) -> None:
     """Pomodoro timer for macOS."""
-    cfg = Config.build(data_dir)
-    cfg.data_dir.mkdir(parents=True, exist_ok=True)
-    setup_logging("mb_pomodoro", cfg.log_path)
-    db = Db(cfg.db_path)
-    ctx.call_on_close(db.close)
-    svc = Service(db, cfg)
+    config = Config.build(data_dir)
+    setup_logging("mb_pomodoro", config.log_path)
+    core = Core(config)
+    ctx.call_on_close(core.close)
     if ctx.invoked_subcommand not in {"worker", "tray"}:
-        svc.recover_stale()
-    ctx.obj = AppContext(svc=svc, out=Output(), cfg=cfg)
+        core.service.recover_stale()
+    ctx.obj = CoreContext(core=core, out=Output())
 
 
 app.command()(start)

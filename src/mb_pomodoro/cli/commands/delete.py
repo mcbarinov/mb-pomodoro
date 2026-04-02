@@ -22,11 +22,11 @@ def delete(
     if not yes:
         # Pre-fetch for confirmation display
         if interval_id is not None:
-            row = app.svc.fetch_interval(interval_id)
+            row = app.core.service.fetch_interval(interval_id)
             if row is None:
                 raise CliError(f"No interval with id {interval_id}.", "INTERVAL_NOT_FOUND")
         else:
-            row = app.svc.fetch_latest_interval()
+            row = app.core.service.fetch_latest_interval()
             if row is None:
                 raise CliError("No intervals found.", "INTERVAL_NOT_FOUND")
 
@@ -43,5 +43,5 @@ def delete(
         if answer != "yes":
             raise CliError("Aborted: interval was not deleted.", "NOT_CONFIRMED")
 
-    result = app.svc.delete_interval(interval_id)
+    result = app.core.service.delete_interval(interval_id)
     app.out.print_deleted(result)

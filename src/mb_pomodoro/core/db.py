@@ -1,11 +1,11 @@
 """Database connection, schema management, and query/mutation functions."""
 
 import sqlite3
-from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Self
 
-from mm_clikit import SqliteDb
+from mm_clikit import SqliteDb, SqliteRow
 
 from mb_pomodoro.time_utils import start_of_day
 
@@ -85,8 +85,7 @@ class EventType(StrEnum):
     INTERRUPTED = "interrupted"
 
 
-@dataclass(frozen=True, slots=True)
-class IntervalRow:
+class IntervalRow(SqliteRow):
     """Interval row projection."""
 
     id: int
@@ -96,6 +95,19 @@ class IntervalRow:
     run_started_at: int | None
     started_at: int
     heartbeat_at: int | None
+
+    @classmethod
+    def from_row(cls, row: sqlite3.Row) -> Self:
+        """Create from a database row."""
+        return cls(
+            id=row["id"],
+            status=IntervalStatus(row["status"]),
+            duration_sec=row["duration_sec"],
+            worked_sec=row["worked_sec"],
+            run_started_at=row["run_started_at"],
+            started_at=row["started_at"],
+            heartbeat_at=row["heartbeat_at"],
+        )
 
     def effective_worked(self, now: int) -> int:
         """Compute actual worked time including the current running segment."""
@@ -107,19 +119,6 @@ class IntervalRow:
 # --- Helpers ---
 
 _SELECT_INTERVAL = "SELECT id, status, duration_sec, worked_sec, run_started_at, started_at, heartbeat_at FROM intervals"
-
-
-def _to_interval_row(row: sqlite3.Row) -> IntervalRow:
-    """Convert a sqlite3.Row to an IntervalRow with enum conversion."""
-    return IntervalRow(
-        id=row["id"],
-        status=IntervalStatus(row["status"]),
-        duration_sec=row["duration_sec"],
-        worked_sec=row["worked_sec"],
-        run_started_at=row["run_started_at"],
-        started_at=row["started_at"],
-        heartbeat_at=row["heartbeat_at"],
-    )
 
 
 class Db(SqliteDb):
@@ -143,17 +142,17 @@ class Db(SqliteDb):
     def fetch_latest_interval(self) -> IntervalRow | None:
         """Return the most recently started interval, or None."""
         row = self.conn.execute(_SELECT_INTERVAL + " ORDER BY started_at DESC LIMIT 1").fetchone()
-        return _to_interval_row(row) if row else None
+        return IntervalRow.from_row(row) if row else None
 
     def fetch_interval(self, interval_id: int) -> IntervalRow | None:
         """Return an interval by id, or None."""
         row = self.conn.execute(_SELECT_INTERVAL + " WHERE id = ?", (interval_id,)).fetchone()
-        return _to_interval_row(row) if row else None
+        return IntervalRow.from_row(row) if row else None
 
     def fetch_history(self, limit: int) -> list[IntervalRow]:
         """Return the most recent intervals ordered by started_at DESC."""
         rows = self.conn.execute(_SELECT_INTERVAL + " ORDER BY started_at DESC LIMIT ?", (limit,)).fetchall()
-        return [_to_interval_row(row) for row in rows]
+        return [IntervalRow.from_row(row) for row in rows]
 
     def fetch_daily_completed(self, limit: int) -> list[tuple[str, int]]:
         """Return daily completed counts (date, count) ordered by date DESC, days with >0 only."""
@@ -211,7 +210,7 @@ class Db(SqliteDb):
     def resolve_interval(self, interval_id: int, resolution: IntervalStatus, now: int) -> bool:
         """Resolve a finished interval as 'completed' or 'abandoned'. Return False if rowcount == 0.
 
-        Note: does not update ended_at — that records when the timer elapsed (set by finish_interval),
+        Note: does not update ended_at -- that records when the timer elapsed (set by finish_interval),
         not when the user made a resolution decision.
         """
         cursor = self.conn.execute(

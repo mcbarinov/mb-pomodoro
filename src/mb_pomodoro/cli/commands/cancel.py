@@ -8,5 +8,5 @@ from mb_pomodoro.cli.context import use_context
 def cancel(ctx: typer.Context) -> None:
     """Cancel the active Pomodoro interval."""
     app = use_context(ctx)
-    result = app.svc.cancel()
+    result = app.core.service.cancel()
     app.out.print_cancelled(result)

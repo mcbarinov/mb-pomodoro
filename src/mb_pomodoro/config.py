@@ -78,4 +78,5 @@ class Config(BaseModel):
                 if isinstance(val, str) and parse_duration(val) is not None:
                     kwargs["default_duration"] = val
 
+        resolved_dir.mkdir(parents=True, exist_ok=True)
         return Config(**kwargs)

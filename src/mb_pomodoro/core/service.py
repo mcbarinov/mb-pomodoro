@@ -6,8 +6,8 @@ import time
 from mm_clikit import CliError, is_process_running
 
 from mb_pomodoro.config import Config
-from mb_pomodoro.db import ACTIVE_STATUSES, Db, IntervalRow, IntervalStatus
-from mb_pomodoro.results import (
+from mb_pomodoro.core.db import ACTIVE_STATUSES, Db, IntervalRow, IntervalStatus
+from mb_pomodoro.core.results import (
     CancelResult,
     DailyHistoryItem,
     DailyHistoryResult,
@@ -408,7 +408,7 @@ class Service:
         if is_process_running(pid_path, command_contains="mb-pomodoro"):
             return
 
-        # Worker may still be starting — skip recovery for fresh intervals without a heartbeat
+        # Worker may still be starting -- skip recovery for fresh intervals without a heartbeat
         now = int(time.time())
         if row.heartbeat_at is None and row.run_started_at is not None and now - row.run_started_at < _STARTUP_GRACE_SEC:
             logger.debug(

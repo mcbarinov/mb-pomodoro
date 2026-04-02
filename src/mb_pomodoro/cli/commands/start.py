@@ -14,6 +14,6 @@ def start(
 ) -> None:
     """Start a new Pomodoro interval."""
     app = use_context(ctx)
-    result = app.svc.start(duration)
-    spawn_daemon([*app.cfg.cli_base_args(), "worker", str(result.interval_id)])
+    result = app.core.service.start(duration)
+    spawn_daemon([*app.core.config.cli_base_args(), "worker", str(result.interval_id)])
     app.out.print_started(result)

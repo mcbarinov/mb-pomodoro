@@ -22,7 +22,7 @@ def re_resolve(
     app = use_context(ctx)
 
     if not yes:
-        row = app.svc.fetch_interval(interval_id)
+        row = app.core.service.fetch_interval(interval_id)
         if row is None:
             raise CliError(f"No interval with id {interval_id}.", "INTERVAL_NOT_FOUND")
 
@@ -38,5 +38,5 @@ def re_resolve(
         if answer != "yes":
             raise CliError("Aborted: interval was not changed.", "NOT_CONFIRMED")
 
-    result = app.svc.re_resolve(interval_id, resolution)
+    result = app.core.service.re_resolve(interval_id, resolution)
     app.out.print_re_resolved(result)

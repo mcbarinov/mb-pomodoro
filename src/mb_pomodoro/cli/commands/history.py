@@ -16,9 +16,9 @@ def history(
     app = use_context(ctx)
 
     if daily:
-        daily_result = app.svc.daily_history(limit)
+        daily_result = app.core.service.daily_history(limit)
         app.out.print_daily_history(daily_result)
         return
 
-    history_result = app.svc.history(limit)
+    history_result = app.core.service.history(limit)
     app.out.print_history(history_result)

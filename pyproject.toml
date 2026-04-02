@@ -11,7 +11,7 @@ classifiers = [
     "Topic :: Utilities",
 ]
 requires-python = ">=3.14"
-dependencies = ["mm-clikit~=0.0.18", "mm-pymac~=0.0.3"]
+dependencies = ["mm-clikit~=0.0.19", "mm-pymac~=0.0.3"]
 [project.scripts]
 mb-pomodoro = "mb_pomodoro.cli:app"
 
@@ -33,7 +33,7 @@ dev = [
     "ruff~=0.15.8",
     "pip-audit~=2.10.0",
     "bandit~=1.9.4",
-    "mypy~=1.19.1",
+    "mypy~=1.20.0",
 ]
 
 [tool.mypy]

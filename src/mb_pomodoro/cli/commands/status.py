@@ -14,5 +14,5 @@ def status(
 ) -> None:
     """Show current Pomodoro timer status."""
     app = use_context(ctx)
-    result = app.svc.status()
+    result = app.core.service.status()
     app.out.print_status(result, short=short)

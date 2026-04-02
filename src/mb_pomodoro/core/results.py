@@ -1,12 +1,11 @@
 """Result data types returned by the service layer."""
 
-from dataclasses import dataclass
+from pydantic import BaseModel
 
-from mb_pomodoro.db import IntervalStatus
+from mb_pomodoro.core.db import IntervalStatus
 
 
-@dataclass(frozen=True, slots=True)
-class StartResult:
+class StartResult(BaseModel):
     """Result of a successful interval start."""
 
     interval_id: int
@@ -14,8 +13,7 @@ class StartResult:
     started_at: int
 
 
-@dataclass(frozen=True, slots=True)
-class PauseResult:
+class PauseResult(BaseModel):
     """Result of a successful interval pause."""
 
     interval_id: int
@@ -23,8 +21,7 @@ class PauseResult:
     remaining_sec: int
 
 
-@dataclass(frozen=True, slots=True)
-class ResumeResult:
+class ResumeResult(BaseModel):
     """Result of a successful interval resume."""
 
     interval_id: int
@@ -32,16 +29,14 @@ class ResumeResult:
     remaining_sec: int
 
 
-@dataclass(frozen=True, slots=True)
-class CancelResult:
+class CancelResult(BaseModel):
     """Result of a successful interval cancellation."""
 
     interval_id: int
     worked_sec: int
 
 
-@dataclass(frozen=True, slots=True)
-class DeleteResult:
+class DeleteResult(BaseModel):
     """Result of permanently deleting an interval."""
 
     interval_id: int
@@ -51,8 +46,7 @@ class DeleteResult:
     started_at: int
 
 
-@dataclass(frozen=True, slots=True)
-class ReResolveResult:
+class ReResolveResult(BaseModel):
     """Result of changing an interval's resolution."""
 
     interval_id: int
@@ -61,8 +55,7 @@ class ReResolveResult:
     worked_sec: int
 
 
-@dataclass(frozen=True, slots=True)
-class FinishResult:
+class FinishResult(BaseModel):
     """Result of resolving a finished interval."""
 
     interval_id: int
@@ -70,8 +63,7 @@ class FinishResult:
     worked_sec: int
 
 
-@dataclass(frozen=True, slots=True)
-class StatusActiveResult:
+class StatusActiveResult(BaseModel):
     """Result of a status check when an interval is active."""
 
     interval_id: int
@@ -83,15 +75,13 @@ class StatusActiveResult:
     today_completed: int
 
 
-@dataclass(frozen=True, slots=True)
-class StatusInactiveResult:
+class StatusInactiveResult(BaseModel):
     """Result of a status check when no interval is active."""
 
     today_completed: int
 
 
-@dataclass(frozen=True, slots=True)
-class HistoryItem:
+class HistoryItem(BaseModel):
     """Single interval entry in history output."""
 
     interval_id: int
@@ -101,37 +91,32 @@ class HistoryItem:
     started_at: int
 
 
-@dataclass(frozen=True, slots=True)
-class HistoryResult:
+class HistoryResult(BaseModel):
     """Result of a history query."""
 
     intervals: list[HistoryItem]
 
 
-@dataclass(frozen=True, slots=True)
-class DailyHistoryItem:
+class DailyHistoryItem(BaseModel):
     """Single day entry in daily history output."""
 
     date: str
     completed: int
 
 
-@dataclass(frozen=True, slots=True)
-class DailyHistoryResult:
+class DailyHistoryResult(BaseModel):
     """Result of a daily history query."""
 
     days: list[DailyHistoryItem]
 
 
-@dataclass(frozen=True, slots=True)
-class TrayStartResult:
+class TrayStartResult(BaseModel):
     """Result of launching the tray in background."""
 
     pid: int
 
 
-@dataclass(frozen=True, slots=True)
-class TrayStopResult:
+class TrayStopResult(BaseModel):
     """Result of stopping the tray."""
 
     pid: int

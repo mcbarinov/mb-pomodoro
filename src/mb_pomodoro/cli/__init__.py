@@ -1,3 +1,3 @@
 """CLI entry point."""
 
-from mb_pomodoro.cli.app import app as app
+from mb_pomodoro.cli.main import app as app

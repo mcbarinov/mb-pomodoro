@@ -15,5 +15,5 @@ _RESOLUTION_HELP = "Resolution: 'completed' (honest work) or 'abandoned' (did no
 def finish(ctx: typer.Context, resolution: Annotated[str, typer.Argument(help=_RESOLUTION_HELP)]) -> None:
     """Resolve a finished interval. Fallback for when the completion dialog was missed or failed."""
     app = use_context(ctx)
-    result = app.svc.finish(resolution)
+    result = app.core.service.finish(resolution)
     app.out.print_finished(result)
