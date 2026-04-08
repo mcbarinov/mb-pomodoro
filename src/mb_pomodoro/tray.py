@@ -45,7 +45,7 @@ class TrayController:
 
     def __init__(self, core: Core) -> None:
         """Initialize tray controller with core."""
-        self._svc = core.service
+        self._db = core.db
         self._cfg = core.config
         self._app = TrayApp(title="\u25c7")
 
@@ -86,9 +86,9 @@ class TrayController:
 
     def _refresh(self) -> None:
         """Poll DB and update menu bar title and menu items."""
-        row = self._svc.fetch_latest_interval()
+        row = self._db.fetch_latest_interval()
         now = int(time.time())
-        today_completed = self._svc.count_today_completed(now)
+        today_completed = self._db.count_today_completed(now)
 
         self._app.title = format_title(row, today_completed)
 

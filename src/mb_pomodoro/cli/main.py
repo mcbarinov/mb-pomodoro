@@ -19,7 +19,7 @@ from mb_pomodoro.cli.commands.tray import tray
 from mb_pomodoro.cli.commands.worker import worker
 from mb_pomodoro.cli.output import Output
 from mb_pomodoro.config import Config
-from mb_pomodoro.core import Core
+from mb_pomodoro.core.core import Core
 
 app = TyperPlus(package_name="mb-pomodoro")
 

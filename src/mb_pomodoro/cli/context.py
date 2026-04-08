@@ -5,7 +5,7 @@ from mm_clikit import CoreContext
 from mm_clikit import use_context as _use_context
 
 from mb_pomodoro.cli.output import Output
-from mb_pomodoro.core import Core
+from mb_pomodoro.core.core import Core
 
 
 def use_context(ctx: typer.Context) -> CoreContext[Core, Output]:

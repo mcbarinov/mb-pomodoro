@@ -22,7 +22,7 @@ def re_resolve(
     app = use_context(ctx)
 
     if not yes:
-        row = app.core.service.fetch_interval(interval_id)
+        row = app.core.db.fetch_interval(interval_id)
         if row is None:
             raise CliError(f"No interval with id {interval_id}.", "INTERVAL_NOT_FOUND")
 

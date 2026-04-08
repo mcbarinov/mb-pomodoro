@@ -22,11 +22,11 @@ def delete(
     if not yes:
         # Pre-fetch for confirmation display
         if interval_id is not None:
-            row = app.core.service.fetch_interval(interval_id)
+            row = app.core.db.fetch_interval(interval_id)
             if row is None:
                 raise CliError(f"No interval with id {interval_id}.", "INTERVAL_NOT_FOUND")
         else:
-            row = app.core.service.fetch_latest_interval()
+            row = app.core.db.fetch_latest_interval()
             if row is None:
                 raise CliError("No intervals found.", "INTERVAL_NOT_FOUND")
 

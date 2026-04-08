@@ -338,64 +338,6 @@ class Service:
         items = [DailyHistoryItem(date=date, completed=count) for date, count in rows]
         return DailyHistoryResult(days=items)
 
-    # --- Worker methods ---
-
-    def fetch_interval(self, interval_id: int) -> IntervalRow | None:
-        """Fetch an interval by ID. Used by the timer worker.
-
-        Args:
-            interval_id: Interval row ID.
-
-        """
-        return self._db.fetch_interval(interval_id)
-
-    def finish_running(self, interval_id: int, duration_sec: int, now: int) -> bool:
-        """Mark a running interval as finished. Used by the timer worker.
-
-        Args:
-            interval_id: Interval row ID.
-            duration_sec: Full duration for worked_sec.
-            now: Current unix timestamp.
-
-        """
-        return self._db.finish_interval(interval_id, duration_sec, now)
-
-    def resolve(self, interval_id: int, resolution: IntervalStatus, now: int) -> bool:
-        """Resolve a finished interval. Used by the timer worker after notification.
-
-        Args:
-            interval_id: Interval row ID.
-            resolution: COMPLETED or ABANDONED.
-            now: Current unix timestamp.
-
-        """
-        return self._db.resolve_interval(interval_id, resolution, now)
-
-    def update_heartbeat(self, interval_id: int, now: int) -> None:
-        """Update heartbeat timestamp for crash recovery. Used by the timer worker.
-
-        Args:
-            interval_id: Interval row ID.
-            now: Current unix timestamp.
-
-        """
-        self._db.update_heartbeat(interval_id, now)
-
-    # --- Tray methods ---
-
-    def fetch_latest_interval(self) -> IntervalRow | None:
-        """Return the most recently started interval. Used by the tray for display."""
-        return self._db.fetch_latest_interval()
-
-    def count_today_completed(self, now: int) -> int:
-        """Count intervals completed today. Used by the tray for display.
-
-        Args:
-            now: Current unix timestamp.
-
-        """
-        return self._db.count_today_completed(now)
-
     # --- Recovery ---
 
     def recover_stale(self) -> None:

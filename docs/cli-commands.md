@@ -66,23 +66,23 @@ $ mb-pomodoro cancel
 Cancelled. Worked: 08:15.
 ```
 
-## `undo-start`
+## `delete [interval_id]`
 
-Permanently delete the active interval, as if it never existed. Use when a timer was started by mistake.
+Permanently delete an interval from history.
 
-- Valid only from `running`.
+- `interval_id` — optional. Defaults to the latest interval.
 - Requires interactive confirmation (type "yes") unless `--yes`/`-y` flag is provided.
 - In `--json` mode, `--yes` is required.
 - Completely removes the interval and all its events from the database.
 
 ```
-$ mb-pomodoro undo-start
-Active interval: 25:00, running, worked 01:30 (01:30 since start).
+$ mb-pomodoro delete
+Interval 42: 25:00, running, worked 01:30, started 2026-04-08 14:00.
 Type 'yes' to permanently delete this interval: yes
-Interval 42 deleted.
+Interval 42 deleted (was running, 01:30 worked).
 
-$ mb-pomodoro undo-start -y
-Interval 43 deleted.
+$ mb-pomodoro delete 38 -y
+Interval 38 deleted (was completed, 25:00 worked).
 ```
 
 ## `finish <resolution>`
@@ -95,6 +95,27 @@ Manually resolve a finished interval. Fallback for when the macOS completion dia
 ```
 $ mb-pomodoro finish completed
 Interval marked as completed. Worked: 25:00.
+```
+
+## `re-resolve <interval_id> <resolution>`
+
+Change the resolution of a completed or abandoned interval.
+
+- `interval_id` — required. The interval to re-resolve.
+- `resolution` — required: `completed` (honest work) or `abandoned` (did not work).
+- Only valid when status is `completed` or `abandoned`.
+- Requires interactive confirmation (type "yes") unless `--yes`/`-y` flag is provided.
+- In `--json` mode, `--yes` is required.
+
+```
+$ mb-pomodoro re-resolve 42 abandoned
+Interval 42: currently completed, worked 25:00, started 2026-04-08 14:00.
+Will change to: abandoned.
+Type 'yes' to confirm: yes
+Interval 42 changed from completed to abandoned.
+
+$ mb-pomodoro re-resolve 42 completed -y
+Interval 42 changed from abandoned to completed.
 ```
 
 ## `status`
@@ -132,4 +153,4 @@ All commands support `--json` for machine-readable output. Envelope:
 - Success: `{"ok": true, "data": {<command-specific>}}`
 - Error: `{"ok": false, "error": "<error_code>", "message": "<human-readable>"}`
 
-Error codes: `INVALID_DURATION`, `ACTIVE_INTERVAL_EXISTS`, `NOT_RUNNING`, `NOT_RESUMABLE`, `NO_ACTIVE_INTERVAL`, `NOT_FINISHED`, `INVALID_RESOLUTION`, `CONCURRENT_MODIFICATION`.
+Error codes: `INVALID_DURATION`, `ACTIVE_INTERVAL_EXISTS`, `NOT_RUNNING`, `NOT_RESUMABLE`, `NO_ACTIVE_INTERVAL`, `NOT_FINISHED`, `INVALID_RESOLUTION`, `CONCURRENT_MODIFICATION`, `INTERVAL_NOT_FOUND`, `CONFIRMATION_REQUIRED`, `NOT_CONFIRMED`, `ALREADY_RESOLVED`, `NOT_RE_RESOLVABLE`.
