@@ -12,6 +12,7 @@ The `raycast/` directory contains [Script Commands](https://github.com/raycast/s
 | Resume Pomodoro | Resume a paused or interrupted interval |
 | Cancel Pomodoro | Cancel the active interval |
 | Pomodoro Status | Show current timer status |
+| Pomodoro Tray | Launch the menu bar tray icon |
 
 ## Setup
 
