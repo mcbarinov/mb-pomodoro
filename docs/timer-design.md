@@ -50,6 +50,7 @@ Simplified:
 - `paused` -> `running` (resume), `cancelled` (cancel)
 - `interrupted` -> `running` (resume), `cancelled` (cancel)
 - `finished` -> `completed` (finish completed), `abandoned` (finish abandoned)
+- `running` -> `running` (`edit restart`, same row id — `worked_sec`, `run_started_at`, `started_at` reset in place; the live worker keeps polling and a new `started` event is appended)
 - `completed`, `abandoned`, `cancelled` — terminal, no further transitions.
 
 ## Time Accounting
@@ -151,7 +152,7 @@ CREATE TABLE intervals (
 | `id` | Autoincrement integer, assigned on `start`. |
 | `duration_sec` | Requested interval length in seconds (e.g., 1500 for 25 minutes). |
 | `status` | Current lifecycle status. See [Interval Statuses](#interval-statuses). |
-| `started_at` | Unix timestamp when the interval was first created. Never changes. |
+| `started_at` | Unix timestamp of the current session start. Set on `start` and reset by `edit restart` on a running interval (same row id). |
 | `ended_at` | Unix timestamp when the interval ended (timer elapsed or cancelled). `NULL` while running/paused. |
 | `worked_sec` | Total seconds of actual work. Updated on pause, cancel, and auto-finish. Excludes paused time. |
 | `run_started_at` | Unix timestamp of the current running segment's start. Set on `start` and `resume`, cleared (`NULL`) on `pause`, `cancel`, `finish`, and crash recovery. |

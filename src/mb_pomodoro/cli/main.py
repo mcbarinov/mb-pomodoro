@@ -12,6 +12,7 @@ from mb_pomodoro.cli.commands.finish import finish
 from mb_pomodoro.cli.commands.history import history
 from mb_pomodoro.cli.commands.pause import pause
 from mb_pomodoro.cli.commands.re_resolve import re_resolve
+from mb_pomodoro.cli.commands.restart import restart
 from mb_pomodoro.cli.commands.resume import resume
 from mb_pomodoro.cli.commands.start import start
 from mb_pomodoro.cli.commands.status import status
@@ -40,7 +41,7 @@ def main(
     ctx.call_on_close(core.close)
     if ctx.invoked_subcommand not in {"worker", "tray"}:
         core.service.recover_stale()
-    ctx.obj = CoreContext(core=core, out=Output())
+    ctx.obj = CoreContext[Core, Output](core=core, out=Output())
 
 
 app.command()(start)
@@ -48,9 +49,14 @@ app.command(aliases=["p"])(pause)
 app.command(aliases=["r"])(resume)
 app.command()(cancel)
 app.command()(finish)
-app.command()(delete)
-app.command(name="re-resolve")(re_resolve)
 app.command(aliases=["h"])(history)
 app.command(aliases=["s"])(status)
 app.command()(tray)
 app.command()(worker)
+
+# Non-standard state edits: off-plan operations grouped under `edit`.
+edit_app = TyperPlus()
+edit_app.command(name="delete")(delete)
+edit_app.command(name="re-resolve")(re_resolve)
+edit_app.command(name="restart")(restart)
+app.add_typer(edit_app, name="edit", help="Off-plan state edits: delete, re-resolve, restart.")

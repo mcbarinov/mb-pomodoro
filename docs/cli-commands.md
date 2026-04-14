@@ -66,25 +66,6 @@ $ mb-pomodoro cancel
 Cancelled. Worked: 08:15.
 ```
 
-## `delete [interval_id]`
-
-Permanently delete an interval from history.
-
-- `interval_id` — optional. Defaults to the latest interval.
-- Requires interactive confirmation (type "yes") unless `--yes`/`-y` flag is provided.
-- In `--json` mode, `--yes` is required.
-- Completely removes the interval and all its events from the database.
-
-```
-$ mb-pomodoro delete
-Interval 42: 25:00, running, worked 01:30, started 2026-04-08 14:00.
-Type 'yes' to permanently delete this interval: yes
-Interval 42 deleted (was running, 01:30 worked).
-
-$ mb-pomodoro delete 38 -y
-Interval 38 deleted (was completed, 25:00 worked).
-```
-
 ## `finish <resolution>`
 
 Manually resolve a finished interval. Fallback for when the macOS completion dialog was missed or timed out.
@@ -95,27 +76,6 @@ Manually resolve a finished interval. Fallback for when the macOS completion dia
 ```
 $ mb-pomodoro finish completed
 Interval marked as completed. Worked: 25:00.
-```
-
-## `re-resolve <interval_id> <resolution>`
-
-Change the resolution of a completed or abandoned interval.
-
-- `interval_id` — required. The interval to re-resolve.
-- `resolution` — required: `completed` (honest work) or `abandoned` (did not work).
-- Only valid when status is `completed` or `abandoned`.
-- Requires interactive confirmation (type "yes") unless `--yes`/`-y` flag is provided.
-- In `--json` mode, `--yes` is required.
-
-```
-$ mb-pomodoro re-resolve 42 abandoned
-Interval 42: currently completed, worked 25:00, started 2026-04-08 14:00.
-Will change to: abandoned.
-Type 'yes' to confirm: yes
-Interval 42 changed from completed to abandoned.
-
-$ mb-pomodoro re-resolve 42 completed -y
-Interval 42 changed from abandoned to completed.
 ```
 
 ## `status`
@@ -144,6 +104,64 @@ Date              Duration    Worked  Status
 2026-02-17 14:00     25:00     25:00  completed
 2026-02-17 10:30     25:00     15:20  cancelled
 2026-02-16 09:00     45:00     45:00  abandoned
+```
+
+## `edit` — off-plan state edits
+
+Group of non-standard operations for manipulating interval state outside the normal flow. Use these when something went off-plan.
+
+### `edit restart`
+
+Reset a running interval's counters in place, keeping the same id. Useful when you started a Pomodoro, got distracted, and want a fresh timer without losing the row.
+
+- Only valid when status is `running`. For any other status (paused, interrupted, finished, or terminal), cancel and start a new interval instead.
+- Resets `worked_sec` to 0, sets `started_at` and `run_started_at` to now, clears `heartbeat_at`. Appends a new `started` event to the audit log.
+- Duration is preserved — restart does not accept a new duration. To change duration, `cancel` + `start <duration>`.
+- The existing timer worker keeps polling and picks up the reset values on its next tick. No worker respawn, no PID churn.
+
+```
+$ mb-pomodoro edit restart
+Interval 42 restarted. Duration: 25:00.
+```
+
+### `edit delete [interval_id]`
+
+Permanently delete an interval from history.
+
+- `interval_id` — optional. Defaults to the latest interval.
+- Requires interactive confirmation (type "yes") unless `--yes`/`-y` is provided.
+- In `--json` mode, `--yes` is required.
+- Completely removes the interval and all its events from the database.
+
+```
+$ mb-pomodoro edit delete
+Interval 42: 25:00, running, worked 01:30, started 2026-04-08 14:00.
+Type 'yes' to permanently delete this interval: yes
+Interval 42 deleted (was running, 01:30 worked).
+
+$ mb-pomodoro edit delete 38 -y
+Interval 38 deleted (was completed, 25:00 worked).
+```
+
+### `edit re-resolve <interval_id> <resolution>`
+
+Change the resolution of a completed or abandoned interval.
+
+- `interval_id` — required. The interval to re-resolve.
+- `resolution` — required: `completed` or `abandoned`.
+- Only valid when status is `completed` or `abandoned`.
+- Requires interactive confirmation (type "yes") unless `--yes`/`-y` is provided.
+- In `--json` mode, `--yes` is required.
+
+```
+$ mb-pomodoro edit re-resolve 42 abandoned
+Interval 42: currently completed, worked 25:00, started 2026-04-08 14:00.
+Will change to: abandoned.
+Type 'yes' to confirm: yes
+Interval 42 changed from completed to abandoned.
+
+$ mb-pomodoro edit re-resolve 42 completed -y
+Interval 42 changed from abandoned to completed.
 ```
 
 ## JSON Output Format

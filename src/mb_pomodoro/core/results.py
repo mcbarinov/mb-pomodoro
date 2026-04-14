@@ -46,6 +46,14 @@ class DeleteResult(BaseModel):
     started_at: int
 
 
+class RestartResult(BaseModel):
+    """Result of restarting a running interval in place."""
+
+    interval_id: int
+    duration_sec: int
+    started_at: int
+
+
 class ReResolveResult(BaseModel):
     """Result of changing an interval's resolution."""
 

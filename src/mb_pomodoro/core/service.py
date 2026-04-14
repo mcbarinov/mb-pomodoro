@@ -17,6 +17,7 @@ from mb_pomodoro.core.results import (
     HistoryResult,
     PauseResult,
     ReResolveResult,
+    RestartResult,
     ResumeResult,
     StartResult,
     StatusActiveResult,
@@ -224,6 +225,31 @@ class Service:
             worked_sec=worked,
             started_at=row.started_at,
         )
+
+    def restart(self) -> RestartResult:
+        """Reset a running interval's counters in place, keeping the same id.
+
+        Only valid when status is ``running``. The existing worker sees the new values
+        on its next poll and keeps counting down -- no respawn, no PID churn.
+
+        Raises:
+            CliError: If there is no running interval or a concurrent race lost.
+
+        """
+        row = self._db.fetch_latest_interval()
+        if row is None or row.status != IntervalStatus.RUNNING:
+            msg = "No running interval to restart."
+            if row is not None:
+                msg = f"{msg} Latest interval: id={row.id}, status={row.status}."
+            raise CliError(msg, "NOT_RUNNING")
+
+        now = int(time.time())
+        if not self._db.restart_interval(row.id, now):
+            logger.warning("Restart rejected: concurrent modification id=%s", row.id)
+            raise CliError("Interval was modified concurrently.", "CONCURRENT_MODIFICATION")
+
+        logger.info("Interval restarted id=%s", row.id)
+        return RestartResult(interval_id=row.id, duration_sec=row.duration_sec, started_at=now)
 
     def re_resolve(self, interval_id: int, resolution: str) -> ReResolveResult:
         """Change the resolution of a completed or abandoned interval.

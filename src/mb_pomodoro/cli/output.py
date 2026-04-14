@@ -12,6 +12,7 @@ from mb_pomodoro.core.results import (
     HistoryResult,
     PauseResult,
     ReResolveResult,
+    RestartResult,
     ResumeResult,
     StartResult,
     StatusActiveResult,
@@ -52,6 +53,13 @@ class Output(DualModeOutput):
         self.output(
             json_data=result.model_dump(),
             display_data=f"Interval {result.interval_id} deleted (was {result.status}, {format_mmss(result.worked_sec)} worked).",
+        )
+
+    def print_restarted(self, result: RestartResult) -> None:
+        """Print interval restart confirmation."""
+        self.output(
+            json_data=result.model_dump(),
+            display_data=f"Interval {result.interval_id} restarted. Duration: {format_mmss(result.duration_sec)}.",
         )
 
     def print_re_resolved(self, result: ReResolveResult) -> None:

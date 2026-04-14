@@ -278,6 +278,24 @@ class Db(SqliteDb):
         self.conn.commit()
         return True
 
+    def restart_interval(self, interval_id: int, now: int) -> bool:
+        """Reset a running interval's counters in place. Return False if rowcount == 0.
+
+        Resets worked_sec, run_started_at, started_at, heartbeat_at. The same row id is preserved
+        and the existing worker continues polling the row with the new values.
+        """
+        cursor = self.conn.execute(
+            "UPDATE intervals SET worked_sec = 0, run_started_at = ?, started_at = ?, heartbeat_at = NULL"
+            " WHERE id = ? AND status = 'running'",
+            (now, now, interval_id),
+        )
+        if cursor.rowcount == 0:
+            self.conn.rollback()
+            return False
+        self._insert_event(interval_id, EventType.STARTED, now)
+        self.conn.commit()
+        return True
+
     def delete_interval(self, interval_id: int) -> None:
         """Permanently delete an interval and all its events."""
         self.conn.execute("DELETE FROM interval_events WHERE interval_id = ?", (interval_id,))
