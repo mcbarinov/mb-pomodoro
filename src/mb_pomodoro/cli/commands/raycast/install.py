@@ -2,8 +2,6 @@
 
 import re
 import shlex
-import shutil
-import sys
 from importlib import resources
 from pathlib import Path
 from typing import Annotated
@@ -33,10 +31,7 @@ def install(
 
     dest = target_dir.resolve() if target_dir is not None else config.data_dir / "raycast"
 
-    binary = shutil.which("mb-pomodoro") or sys.argv[0]
-    base_args = config.cli_base_args()
-    parts = [binary, *base_args[1:]]
-    cmd_prefix = " ".join(shlex.quote(p) for p in parts)
+    cmd_prefix = " ".join(shlex.quote(p) for p in config.cli_base_args())
 
     refreshed = dest.exists() and any(dest.glob("*.sh"))
 

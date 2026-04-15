@@ -1,6 +1,9 @@
 """CLI app definition and initialization."""
 
+import logging
+import sys
 from pathlib import Path
+from types import TracebackType
 from typing import Annotated
 
 import typer
@@ -23,6 +26,21 @@ from mb_pomodoro.cli.output import Output
 from mb_pomodoro.config import Config
 from mb_pomodoro.core.core import Core
 
+
+def _install_excepthook(logger: logging.Logger) -> None:
+    """Route uncaught exceptions through the logging framework."""
+    previous = sys.excepthook
+
+    def _hook(exc_type: type[BaseException], exc: BaseException, tb: TracebackType | None) -> None:
+        if issubclass(exc_type, KeyboardInterrupt):
+            previous(exc_type, exc, tb)
+            return
+        logger.critical("Unhandled exception", exc_info=(exc_type, exc, tb))
+        previous(exc_type, exc, tb)
+
+    sys.excepthook = _hook
+
+
 app = TyperPlus(package_name="mb-pomodoro")
 
 
@@ -38,6 +56,7 @@ def main(
     """Pomodoro timer for macOS."""
     config = Config.build(data_dir)
     setup_logging("mb_pomodoro", file_path=config.log_path)
+    _install_excepthook(logging.getLogger("mb_pomodoro"))
     core = Core(config)
     ctx.call_on_close(core.close)
     if ctx.invoked_subcommand not in {"worker", "tray"}:

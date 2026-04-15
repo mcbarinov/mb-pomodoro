@@ -1,6 +1,7 @@
 """Centralized application configuration."""
 
 import os
+import sys
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -51,8 +52,14 @@ class Config(BaseModel):
         return self.data_dir / "config.toml"
 
     def cli_base_args(self) -> list[str]:
-        """Build CLI base args, including --data-dir only when non-default."""
-        args: list[str] = ["mb-pomodoro"]
+        """Build CLI base args with absolute binary path plus --data-dir when non-default.
+
+        Uses sys.argv[0] (the entry-point path of the currently running process) so
+        that subprocess spawns always re-enter the same binary the user invoked, even
+        when multiple mb-pomodoro installs coexist on PATH.
+        """
+        binary = str(Path(sys.argv[0]).resolve())
+        args: list[str] = [binary]
         if self.data_dir != DEFAULT_DATA_DIR:
             args.extend(["--data-dir", str(self.data_dir)])
         return args
