@@ -7,12 +7,13 @@ import typer
 from mm_clikit import CoreContext, TyperPlus, setup_logging
 
 from mb_pomodoro.cli.commands.cancel import cancel
-from mb_pomodoro.cli.commands.delete import delete
+from mb_pomodoro.cli.commands.edit.delete import delete
+from mb_pomodoro.cli.commands.edit.re_resolve import re_resolve
+from mb_pomodoro.cli.commands.edit.restart import restart
 from mb_pomodoro.cli.commands.finish import finish
 from mb_pomodoro.cli.commands.history import history
 from mb_pomodoro.cli.commands.pause import pause
-from mb_pomodoro.cli.commands.re_resolve import re_resolve
-from mb_pomodoro.cli.commands.restart import restart
+from mb_pomodoro.cli.commands.raycast.install import install as raycast_install
 from mb_pomodoro.cli.commands.resume import resume
 from mb_pomodoro.cli.commands.start import start
 from mb_pomodoro.cli.commands.status import status
@@ -60,3 +61,7 @@ edit_app.command(name="delete")(delete)
 edit_app.command(name="re-resolve")(re_resolve)
 edit_app.command(name="restart")(restart)
 app.add_typer(edit_app, name="edit", help="Off-plan state edits: delete, re-resolve, restart.")
+
+raycast_app = TyperPlus()
+raycast_app.command(name="install")(raycast_install)
+app.add_typer(raycast_app, name="raycast", help="Manage Raycast script commands.")

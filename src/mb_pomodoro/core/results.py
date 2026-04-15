@@ -128,3 +128,12 @@ class TrayStopResult(BaseModel):
     """Result of stopping the tray."""
 
     pid: int
+
+
+class RaycastInstallResult(BaseModel):
+    """Result of installing Raycast script commands."""
+
+    target_dir: str
+    installed: list[str]
+    refreshed: bool
+    command: str

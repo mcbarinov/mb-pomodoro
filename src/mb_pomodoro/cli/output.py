@@ -11,6 +11,7 @@ from mb_pomodoro.core.results import (
     FinishResult,
     HistoryResult,
     PauseResult,
+    RaycastInstallResult,
     ReResolveResult,
     RestartResult,
     ResumeResult,
@@ -109,6 +110,21 @@ class Output(DualModeOutput):
     def print_tray_stopped(self, result: TrayStopResult) -> None:
         """Print tray stop confirmation."""
         self.output(json_data=result.model_dump(), display_data=f"Tray stopped (pid {result.pid}).")
+
+    def print_raycast_installed(self, result: RaycastInstallResult) -> None:
+        """Print Raycast install confirmation."""
+        count = len(result.installed)
+        if result.refreshed:
+            display: str = f"Refreshed {count} Raycast scripts in {result.target_dir}"
+        else:
+            display = (
+                f"Installed {count} Raycast scripts to {result.target_dir}\n"
+                "\n"
+                "One-time setup in Raycast:\n"
+                "  Settings → Extensions → Script Commands → Add Directories\n"
+                "  → select the path above"
+            )
+        self.output(json_data=result.model_dump(), display_data=display)
 
     def print_status(self, result: StatusActiveResult | StatusInactiveResult, *, short: bool = False) -> None:
         """Print current timer status."""
