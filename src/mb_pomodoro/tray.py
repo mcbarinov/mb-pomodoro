@@ -134,7 +134,7 @@ class TrayController:
         def task() -> None:
             # S603: args are controlled literals, "mb-pomodoro" is our own CLI entry point
             subprocess.run(  # noqa: S603  # nosec B603, B607
-                [*self._cfg.cli_base_args(), "--json", command],
+                [*self._cfg.base_argv(), "--json", command],
                 capture_output=True,
                 check=False,
             )

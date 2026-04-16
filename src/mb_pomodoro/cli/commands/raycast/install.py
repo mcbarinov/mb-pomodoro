@@ -31,7 +31,7 @@ def install(
 
     dest = target_dir.resolve() if target_dir is not None else config.data_dir / "raycast"
 
-    cmd_prefix = " ".join(shlex.quote(p) for p in config.cli_base_args())
+    cmd_prefix = " ".join(shlex.quote(p) for p in config.base_argv())
 
     refreshed = dest.exists() and any(dest.glob("*.sh"))
 

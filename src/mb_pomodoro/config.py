@@ -1,24 +1,20 @@
 """Centralized application configuration."""
 
-import os
-import sys
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from mm_clikit import BaseDataDirConfig
+from pydantic import Field, computed_field
 
 from mb_pomodoro.time_utils import parse_duration
 
-DEFAULT_DATA_DIR = Path.home() / ".local" / "mb-pomodoro"
 
-
-class Config(BaseModel):
+class Config(BaseDataDirConfig):
     """Application-wide configuration."""
 
-    model_config = ConfigDict(frozen=True)
+    app_name: ClassVar[str] = "mb-pomodoro"
 
-    data_dir: Path = Field(description="Base directory for all application data")
     default_duration: str = Field(default="25", description="Default timer duration (e.g. '25', '25m', '90s', '10m30s')")
 
     @computed_field(description="SQLite database file")
@@ -51,31 +47,13 @@ class Config(BaseModel):
         """Optional TOML configuration file."""
         return self.data_dir / "config.toml"
 
-    def cli_base_args(self) -> list[str]:
-        """Build CLI base args with absolute binary path plus --data-dir when non-default.
-
-        Uses sys.argv[0] (the entry-point path of the currently running process) so
-        that subprocess spawns always re-enter the same binary the user invoked, even
-        when multiple mb-pomodoro installs coexist on PATH.
-        """
-        binary = str(Path(sys.argv[0]).resolve())
-        args: list[str] = [binary]
-        if self.data_dir != DEFAULT_DATA_DIR:
-            args.extend(["--data-dir", str(self.data_dir)])
-        return args
-
     @staticmethod
     def build(data_dir: Path | None = None) -> Config:
         """Build a Config from CLI arg / env var / default, with optional TOML overlay."""
-        if data_dir is not None:
-            resolved_dir = data_dir.resolve()
-        elif env := os.environ.get("MB_POMODORO_DATA_DIR"):
-            resolved_dir = Path(env).resolve()
-        else:
-            resolved_dir = DEFAULT_DATA_DIR
-        config_path = resolved_dir / "config.toml"
+        resolved = Config.resolve_data_dir(data_dir)
 
-        kwargs: dict[str, Any] = {"data_dir": resolved_dir}
+        kwargs: dict[str, Any] = {"data_dir": resolved}
+        config_path = resolved / "config.toml"
         if config_path.is_file():
             with config_path.open("rb") as f:
                 toml_data = tomllib.load(f)
@@ -85,5 +63,4 @@ class Config(BaseModel):
                 if isinstance(val, str) and parse_duration(val) is not None:
                     kwargs["default_duration"] = val
 
-        resolved_dir.mkdir(parents=True, exist_ok=True)
         return Config(**kwargs)

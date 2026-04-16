@@ -46,7 +46,7 @@ def _launch_background(ctx: typer.Context) -> None:
         pid = read_pid_file(app.core.config.tray_pid_path)
         raise CliError(f"Tray is already running (pid {pid}).", "TRAY_ALREADY_RUNNING")
 
-    pid = spawn_daemon([*app.core.config.cli_base_args(), "tray", "--run"])
+    pid = spawn_daemon([*app.core.config.base_argv(), "tray", "--run"])
 
     # Brief wait to verify the process is alive
     time.sleep(_LAUNCH_VERIFY_SEC)
